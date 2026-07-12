@@ -13,6 +13,7 @@
     "@flux/application": "workspace:*",
     "@flux/contracts": "workspace:*",
     "@flux/domain": "workspace:*",
+    "@flux/orchestration": "workspace:*",
     "@temporalio/client": "catalog:",
     "effect": "catalog:"
   },

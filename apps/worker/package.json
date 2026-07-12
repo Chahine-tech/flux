@@ -6,12 +6,14 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "dev": "tsx src/main.ts"
+    "dev": "tsx src/main.ts",
+    "demo": "tsx src/demo.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@flux/adapters": "workspace:*",
     "@flux/orchestration": "workspace:*",
+    "@temporalio/client": "catalog:",
     "@temporalio/worker": "catalog:",
     "effect": "catalog:"
   },

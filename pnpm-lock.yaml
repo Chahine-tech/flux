@@ -71,6 +71,9 @@ importers:
       '@flux/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@flux/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
       '@temporalio/client':
         specifier: 'catalog:'
         version: 1.20.2
