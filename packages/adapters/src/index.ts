@@ -6,4 +6,7 @@
  * `effect/unstable/*` (HttpClient…) — those modules may break on
  * minor releases (ARCHITECTURE.md §9).
  */
-export {}
+export * as HttpHealth from "./health/http.ts"
+export * as PrometheusMetrics from "./metrics/prometheus.ts"
+export * as SlackNotify from "./notify/slack.ts"
+export * as NginxRouter from "./router/nginx.ts"

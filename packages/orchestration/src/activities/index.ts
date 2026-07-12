@@ -1,2 +1,2 @@
-// Temporal activities — Effect → Promise bridge (see ../index.ts).
-export {}
+export * from "./deployment.activities.ts"
+export type * from "./types.ts"
