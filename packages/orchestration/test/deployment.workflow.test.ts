@@ -133,6 +133,42 @@ describe("deploymentWorkflow", () => {
     expect(result.kind).toBe("Succeeded")
   })
 
+  it("restores traffic to the previous version when aborted at a gate (saga)", async () => {
+    const shifts: Array<{ readonly version: string; readonly weight: number }> = []
+    const input: DeploymentInput = {
+      ...baseInput,
+      steps: [{ percent: 50, monitorMs: 0, requiresApproval: true }]
+    }
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowsPath,
+      activities: {
+        ...okActivities(),
+        setTrafficWeight: async (p: { version: string; weight: number }) => {
+          shifts.push({ version: p.version, weight: p.weight })
+        }
+      } satisfies DeploymentActivities
+    })
+    const result = (await worker.runUntil(async () => {
+      const handle = await env.client.workflow.start("deploymentWorkflow", {
+        taskQueue: TASK_QUEUE,
+        workflowId: `wf-abort-${Date.now()}`,
+        args: [input]
+      })
+      for (let i = 0; i < 50; i++) {
+        if ((await handle.query<DeploymentState>("status")).phase === "awaiting-approval") break
+        await new Promise((r) => setTimeout(r, 50))
+      }
+      await handle.executeUpdate("abort")
+      return handle.result()
+    })) as DeploymentResult
+    expect(result.kind).toBe("Aborted")
+    // The compensation restored the previous version to 100% traffic.
+    expect(shifts.at(-1)).toEqual({ version: "v2.0.8", weight: 100 })
+  })
+
   it("turns a non-retryable activity failure into a Failed outcome", async () => {
     const result = await run({
       ...okActivities(),

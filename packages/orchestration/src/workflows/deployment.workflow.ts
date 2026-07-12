@@ -14,10 +14,12 @@ import { type DeploymentInput, type DeploymentResult, type DeploymentState, SEAR
 
 /**
  * Canary deployment workflow — deterministic, plain TypeScript, ZERO Effect.
- * It sequences activities, branches on their plain tagged results, and exposes
- * its progress via a `status` query. approve/abort are validated Updates
- * (N2): the client is rejected if it approves with no gate open, or aborts a
- * finished deployment.
+ *
+ * Rollback is a saga (N2): the first traffic shift registers a compensation
+ * that restores the previous version. Every non-success termination — a
+ * threshold breach, an abort, or an unexpected failure — runs the compensation
+ * stack, so traffic is never left stranded on a bad version. approve/abort are
+ * validated Updates; progress is exposed through the `status` query.
  */
 
 const acts = proxyActivities<DeploymentActivities>({
@@ -54,7 +56,20 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
   let aborted = false
   let approved = false
 
-  // Tag the execution for visibility queries (flux history).
+  // Saga: undo actions to run (LIFO) on any non-success termination.
+  const compensations: Array<() => Promise<void>> = []
+  const compensate = async (): Promise<void> => {
+    state = { ...state, phase: "rolling-back" }
+    while (compensations.length > 0) {
+      const undo = compensations.pop()!
+      try {
+        await undo()
+      } catch (error) {
+        log.error("compensation failed", { error: String(error) })
+      }
+    }
+  }
+
   upsertSearchAttributes({
     [SEARCH_ATTRIBUTES.service]: [input.service],
     [SEARCH_ATTRIBUTES.version]: [input.version],
@@ -90,6 +105,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       throw error
     }
     log.warn("deployment failed", { type: failure.type })
+    await compensate() // restore traffic if anything was shifted before the failure
     result = {
       kind: "Failed",
       service: input.service,
@@ -111,6 +127,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
     for (let stepIndex = 0; stepIndex < input.steps.length; stepIndex++) {
       const step = input.steps[stepIndex]!
       if (aborted) {
+        await compensate()
         return { kind: "Aborted", service: input.service, atPercent: lastPercent }
       }
       lastPercent = step.percent
@@ -121,6 +138,15 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
         version: input.version,
         weight: step.percent
       })
+      // Register the compensation the first time traffic diverts to the new version.
+      if (compensations.length === 0) {
+        compensations.push(() =>
+          acts.setTrafficWeight({
+            service: input.service,
+            version: input.previousVersion,
+            weight: 100
+          }))
+      }
 
       state = { ...state, phase: "monitoring" }
       const evaluation = await acts.monitorStep({
@@ -132,13 +158,8 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       })
 
       if (evaluation._tag === "Breached") {
-        state = { ...state, phase: "rolling-back" }
         log.warn("threshold breached, rolling back", { atPercent: step.percent })
-        await acts.setTrafficWeight({
-          service: input.service,
-          version: input.previousVersion,
-          weight: 100
-        })
+        await compensate()
         await acts.notify({
           kind: "rolled-back",
           service: input.service,
@@ -158,13 +179,15 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
         state = { ...state, phase: "awaiting-approval" }
         await condition(() => approved || aborted, step.approvalTimeoutMs)
         if (aborted) {
+          await compensate()
           return { kind: "Aborted", service: input.service, atPercent: step.percent }
         }
         approved = false
       }
     }
 
-    // 4. Full rollout succeeded.
+    // 4. Full rollout succeeded — commit (drop compensations, keep new version live).
+    compensations.length = 0
     await acts.notify({ kind: "succeeded", service: input.service, message: input.version })
     return { kind: "Succeeded", service: input.service, version: input.version }
   }
