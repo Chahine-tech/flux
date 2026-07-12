@@ -15,7 +15,10 @@ const config = Schema.decodeUnknownSync(DeploymentConfig)({
       { percent: 50, monitorDuration: "10m", requiresApproval: true, approvalTimeout: "1h" }
     ]
   },
-  thresholds: { maxErrorRate: 0.01, maxP99LatencyMs: 500 }
+  thresholds: [
+    { name: "errorRate", query: "rate(http_errors[1m])", max: 0.01 },
+    { name: "p99", query: "histogram_quantile(0.99, http_latency)", max: 500 }
+  ]
 })
 
 describe("configToInput", () => {
@@ -31,11 +34,14 @@ describe("configToInput", () => {
     expect(input.steps[0]?.approvalTimeoutMs).toBeUndefined()
   })
 
-  it("carries service, versions and thresholds through unchanged", () => {
+  it("carries service, versions and metric rules through unchanged", () => {
     const input = configToInput(config)
     expect(input.service).toBe("api")
     expect(input.version).toBe("v2.1.0")
     expect(input.previousVersion).toBe("v2.0.8")
-    expect(input.thresholds).toEqual({ maxErrorRate: 0.01, maxP99LatencyMs: 500 })
+    expect(input.rules).toEqual([
+      { name: "errorRate", query: "rate(http_errors[1m])", max: 0.01 },
+      { name: "p99", query: "histogram_quantile(0.99, http_latency)", max: 500 }
+    ])
   })
 })

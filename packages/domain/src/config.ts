@@ -5,15 +5,24 @@ import { DurationFromShorthand } from "./duration.ts"
 const NonEmptyString = Schema.String.check(Schema.isMinLength(1))
 
 /**
- * Failure budget for a canary step. A step is rolled back as soon as an
- * observed metric crosses one of these limits (see `evaluateThresholds`).
+ * One rule in the failure budget: watch the metric produced by `query` and
+ * roll back if the observed value exceeds `max`. Modelling thresholds as a list
+ * of PromQL-backed rules (rather than two fixed fields) makes them arbitrary
+ * custom metrics — and lets two rules share a query, which is where the metrics
+ * adapter's RequestResolver deduplicates the fetch.
  */
-export const Thresholds = Schema.Struct({
-  /** Max tolerated error rate as a fraction, `0..1`. */
-  maxErrorRate: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
-  /** Max tolerated p99 latency in milliseconds. */
-  maxP99LatencyMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
+export const MetricRule = Schema.Struct({
+  /** Human-facing name, used as the reading key and breach label. */
+  name: NonEmptyString,
+  /** The PromQL expression to evaluate. */
+  query: NonEmptyString,
+  /** Upper bound — a breach is `observed > max`. */
+  max: Schema.Finite
 })
+export type MetricRule = typeof MetricRule.Type
+
+/** The failure budget for a deployment: a non-empty list of metric rules. */
+export const Thresholds = Schema.NonEmptyArray(MetricRule)
 export type Thresholds = typeof Thresholds.Type
 
 /** One stage of a progressive rollout: shift `percent` traffic, then watch. */

@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { MetricsSnapshot } from "./metrics.ts"
+import { ThresholdBreach } from "./thresholds.ts"
 
 /**
  * Terminal outcome of a deployment workflow, as a discriminated union.
@@ -19,7 +19,7 @@ export const RolledBack = Schema.TaggedStruct("RolledBack", {
   fromVersion: Schema.String,
   toVersion: Schema.String,
   atPercent: Schema.Finite,
-  metrics: MetricsSnapshot
+  breaches: Schema.Array(ThresholdBreach)
 })
 
 /** Manually aborted via signal/update before completing. */

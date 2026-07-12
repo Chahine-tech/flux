@@ -23,5 +23,7 @@ export const configToInput = (config: DeploymentConfig): DeploymentInput => ({
   thresholds: {
     maxErrorRate: config.thresholds.maxErrorRate,
     maxP99LatencyMs: config.thresholds.maxP99LatencyMs
-  }
+  },
+  // Operational default; a per-deployment override can come from config later.
+  pollIntervalMs: 5_000
 })

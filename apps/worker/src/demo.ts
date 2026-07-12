@@ -17,38 +17,42 @@ import { createActivities, type DeploymentInput, type DeploymentResult } from "@
  * Prereq: `docker compose up -d`. Run with `pnpm --filter @flux/worker demo`.
  */
 
-// Metrics: healthy on the first monitored step, breaching afterwards.
-const DemoMetrics = Layer.effect(
-  MetricsPort,
-  Effect.gen(function*() {
-    const calls = yield* Ref.make(0)
-    return {
-      collect: () =>
-        Ref.updateAndGet(calls, (n) => n + 1).pipe(
-          Effect.map((n) =>
-            n <= 1
-              ? { errorRate: 0.002, p99LatencyMs: 120 }
-              : { errorRate: 0.05, p99LatencyMs: 900 }
-          )
+// Shared canary state: the new version's current traffic weight. The demo
+// models "the new version is bad": once >= 50% of traffic hits it, metrics
+// breach — deterministic regardless of how many times the Stream polls.
+const makeDemoLayer = Effect.gen(function*() {
+  const weights = yield* Ref.make<Record<string, number>>({})
+
+  const DemoRouter = Layer.succeed(RouterPort, {
+    setTrafficWeight: (params) =>
+      Ref.update(weights, (w) => ({ ...w, [params.version]: params.weight })).pipe(
+        Effect.zipRight(
+          Console.log(`  [router]  ${params.service} → ${params.version} @ ${params.weight}%`)
         )
-    }
+      )
   })
-)
 
-const DemoHealth = Layer.succeed(HealthPort, {
-  check: (params) => Console.log(`  [health]  ${params.service} ${params.version} OK`)
+  const DemoMetrics = Layer.succeed(MetricsPort, {
+    collect: (params) =>
+      Ref.get(weights).pipe(
+        Effect.map((w) =>
+          (w[params.version] ?? 0) >= 50
+            ? { errorRate: 0.05, p99LatencyMs: 900 }
+            : { errorRate: 0.002, p99LatencyMs: 120 }
+        )
+      )
+  })
+
+  const DemoHealth = Layer.succeed(HealthPort, {
+    check: (params) => Console.log(`  [health]  ${params.service} ${params.version} OK`)
+  })
+
+  const DemoNotify = Layer.succeed(NotifyPort, {
+    send: (n) => Console.log(`  [notify]  (${n.kind}) ${n.service}: ${n.message}`)
+  })
+
+  return Layer.mergeAll(DemoMetrics, DemoHealth, DemoRouter, DemoNotify)
 })
-
-const DemoRouter = Layer.succeed(RouterPort, {
-  setTrafficWeight: (params) =>
-    Console.log(`  [router]  ${params.service} → ${params.version} @ ${params.weight}%`)
-})
-
-const DemoNotify = Layer.succeed(NotifyPort, {
-  send: (n) => Console.log(`  [notify]  (${n.kind}) ${n.service}: ${n.message}`)
-})
-
-const DemoLayer = Layer.mergeAll(DemoMetrics, DemoHealth, DemoRouter, DemoNotify)
 
 const demoInput: DeploymentInput = {
   service: "api",
@@ -59,7 +63,8 @@ const demoInput: DeploymentInput = {
     { percent: 50, monitorMs: 300, requiresApproval: false },
     { percent: 100, monitorMs: 0, requiresApproval: false }
   ],
-  thresholds: { maxErrorRate: 0.01, maxP99LatencyMs: 500 }
+  thresholds: { maxErrorRate: 0.01, maxP99LatencyMs: 500 },
+  pollIntervalMs: 100
 }
 
 const main = async (): Promise<void> => {
@@ -67,7 +72,7 @@ const main = async (): Promise<void> => {
   const namespace = "default"
   const taskQueue = "flux-deployments"
 
-  const runtime = ManagedRuntime.make(DemoLayer)
+  const runtime = ManagedRuntime.make(Layer.unwrap(makeDemoLayer))
   const nativeConnection = await NativeConnection.connect({ address })
 
   const worker = await Worker.create({

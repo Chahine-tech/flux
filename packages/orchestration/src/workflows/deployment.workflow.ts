@@ -1,4 +1,4 @@
-import { condition, defineSignal, log, proxyActivities, setHandler, sleep } from "@temporalio/workflow"
+import { condition, defineSignal, log, proxyActivities, setHandler } from "@temporalio/workflow"
 import type { DeploymentActivities } from "../activities/types.ts"
 import type { DeploymentInput, DeploymentResult } from "../deployment-input.ts"
 
@@ -47,14 +47,13 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       weight: step.percent
     })
 
-    if (step.monitorMs > 0) {
-      await sleep(step.monitorMs)
-    }
-
+    // The monitorStep activity polls metrics over the window and returns early
+    // on a breach — the waiting happens inside the activity, not here.
     const evaluation = await acts.monitorStep({
       service: input.service,
       version: input.version,
       windowMs: step.monitorMs,
+      pollIntervalMs: input.pollIntervalMs,
       thresholds: input.thresholds
     })
 

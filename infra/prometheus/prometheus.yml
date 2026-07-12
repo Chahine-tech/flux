@@ -7,10 +7,10 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  # N1 — flux self-instruments (Effect Metric module, ARCHITECTURE.md §5):
-  # - job_name: flux-worker
-  #   static_configs:
-  #     - targets: ["host.docker.internal:9464"]
+  # flux self-instruments via the Effect Metric module (the meta loop).
+  - job_name: flux-worker
+    static_configs:
+      - targets: ["host.docker.internal:9464"]
   # - job_name: flux-control-plane
   #   static_configs:
   #     - targets: ["host.docker.internal:9465"]

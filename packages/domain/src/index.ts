@@ -9,6 +9,5 @@
 export * from "./config.ts"
 export * from "./duration.ts"
 export * from "./errors.ts"
-export * from "./metrics.ts"
 export * from "./result.ts"
 export * from "./thresholds.ts"

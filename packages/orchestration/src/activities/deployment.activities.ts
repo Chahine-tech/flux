@@ -30,6 +30,7 @@ export const createActivities = (
         service: params.service,
         version: params.version,
         window: Duration.millis(params.windowMs),
+        pollInterval: Duration.millis(params.pollIntervalMs),
         thresholds: params.thresholds
       })
     ),

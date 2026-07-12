@@ -136,6 +136,9 @@ importers:
       '@flux/application':
         specifier: workspace:*
         version: link:../../packages/application
+      '@flux/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@flux/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration
@@ -198,6 +201,28 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.97
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0))
+
+  packages/config:
+    dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-beta.97
+      toml:
+        specifier: ^4.1.2
+        version: 4.1.2
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'

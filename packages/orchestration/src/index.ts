@@ -10,3 +10,4 @@
 export * from "./activities/index.ts"
 export * from "./deployment-input.ts"
 export * from "./mapper.ts"
+export * from "./metrics.ts"

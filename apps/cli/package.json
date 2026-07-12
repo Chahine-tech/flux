@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
+    "@flux/adapters": "workspace:*",
     "@flux/application": "workspace:*",
     "@flux/contracts": "workspace:*",
     "@flux/domain": "workspace:*",

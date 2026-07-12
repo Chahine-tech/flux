@@ -12,4 +12,8 @@ export const notify = (
   Effect.gen(function*() {
     const port = yield* NotifyPort
     yield* port.send(notification)
-  })
+  }).pipe(
+    Effect.withSpan("flux.notify", {
+      attributes: { "flux.kind": notification.kind, "flux.service": notification.service }
+    })
+  )

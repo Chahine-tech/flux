@@ -1,6 +1,9 @@
+import { createServer } from "node:http"
 import { fileURLToPath } from "node:url"
 import { NativeConnection, Worker } from "@temporalio/worker"
-import { createActivities } from "@flux/orchestration"
+import { createActivities, metricsPrometheusText } from "@flux/orchestration"
+import type { ManagedRuntime } from "effect"
+import type { AppServices } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
 
 /**
@@ -12,8 +15,26 @@ import { makeRuntime } from "./runtime.ts"
  */
 const TASK_QUEUE = "flux-deployments"
 
+/** Serve the Effect metric registry as Prometheus text on `/metrics`. */
+const startMetricsServer = (runtime: ManagedRuntime.ManagedRuntime<AppServices, never>) => {
+  const port = Number(process.env.METRICS_PORT ?? 9464)
+  const server = createServer((req, res) => {
+    if (req.url !== "/metrics") {
+      res.writeHead(404).end()
+      return
+    }
+    runtime.runPromise(metricsPrometheusText).then(
+      (text) => res.writeHead(200, { "content-type": "text/plain; version=0.0.4" }).end(text),
+      () => res.writeHead(500).end()
+    )
+  })
+  server.listen(port, () => console.log(`[flux] metrics on http://localhost:${port}/metrics`))
+  return server
+}
+
 const main = async (): Promise<void> => {
   const runtime = makeRuntime()
+  const metricsServer = startMetricsServer(runtime)
   const connection = await NativeConnection.connect({
     address: process.env.TEMPORAL_ADDRESS ?? "localhost:7233"
   })
@@ -30,6 +51,7 @@ const main = async (): Promise<void> => {
     console.log(`[flux] worker listening on task queue "${TASK_QUEUE}"`)
     await worker.run()
   } finally {
+    metricsServer.close()
     await runtime.dispose()
     await connection.close()
   }

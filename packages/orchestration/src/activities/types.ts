@@ -24,6 +24,7 @@ export interface DeploymentActivities {
     readonly service: string
     readonly version: string
     readonly windowMs: number
+    readonly pollIntervalMs: number
     readonly thresholds: DeploymentThresholds
   }): Promise<ThresholdEvaluation>
 

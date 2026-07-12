@@ -27,6 +27,8 @@ export interface DeploymentInput {
   readonly previousVersion: string
   readonly steps: ReadonlyArray<DeploymentStepInput>
   readonly thresholds: DeploymentThresholds
+  /** How often each step samples metrics while monitoring, in milliseconds. */
+  readonly pollIntervalMs: number
 }
 
 export type DeploymentResult =

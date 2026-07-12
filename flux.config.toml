@@ -1,0 +1,28 @@
+# flux configuration — read by the worker (and CLI) via @flux/config.
+#
+# Environment variables take precedence over the values below. Nested keys map
+# to CONSTANT_CASE, joining the table and key names, e.g.:
+#   [temporal].address     -> TEMPORAL_ADDRESS
+#   [metrics].prometheus_url -> METRICS_PROMETHEUS_URL
+#   [router].reload_command  -> ROUTER_RELOAD_COMMAND
+#   [notifications].slack_webhook -> NOTIFICATIONS_SLACK_WEBHOOK
+
+[temporal]
+address = "localhost:7233"
+namespace = "default"
+task_queue = "flux-deployments"
+
+[metrics]
+prometheus_url = "http://localhost:9090"
+
+[thresholds]
+max_error_rate = 0.01       # 1%
+max_p99_latency_ms = 500
+
+[router]
+type = "nginx"              # nginx | caddy | traefik | custom
+config_path = "/etc/nginx/conf.d/flux-upstream.conf"
+reload_command = "nginx -s reload"
+
+[notifications]
+# slack_webhook = "https://hooks.slack.com/services/..."

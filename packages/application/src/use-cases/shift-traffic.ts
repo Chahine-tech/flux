@@ -12,4 +12,12 @@ export const shiftTraffic = (
   Effect.gen(function*() {
     const router = yield* RouterPort
     yield* router.setTrafficWeight(params)
-  })
+  }).pipe(
+    Effect.withSpan("flux.shiftTraffic", {
+      attributes: {
+        "flux.service": params.service,
+        "flux.version": params.version,
+        "flux.weight": params.weight
+      }
+    })
+  )

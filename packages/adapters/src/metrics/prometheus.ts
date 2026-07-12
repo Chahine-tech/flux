@@ -1,55 +1,40 @@
-import { Duration, Effect, Layer, Schedule, Schema } from "effect"
+import { Duration, Effect, Layer, Request, RequestResolver, Schedule, Schema } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { type CollectParams, MetricsPort, MetricsUnavailable } from "@flux/application"
-import type { MetricsSnapshot } from "@flux/domain"
+import { MetricsPort, MetricsUnavailable } from "@flux/application"
 
 /**
  * Prometheus metrics adapter — implements MetricsPort against the Prometheus
- * HTTP API (`GET /api/v1/query`). Requires an `HttpClient` in context, which
- * the composition root provides (FetchHttpClient / NodeHttpClient). Transient
- * HTTP failures are retried here with a short jittered backoff — technical
- * retries live in the adapter, not the workflow.
+ * HTTP API (`GET /api/v1/query`). Requires an `HttpClient` in context.
+ *
+ * Queries flow through a RequestResolver: a monitoring poll evaluates several
+ * rules concurrently, so any that share a PromQL are batched together and the
+ * resolver deduplicates them into a single backend fetch. Transient HTTP
+ * failures are retried here with a short jittered backoff — technical retries
+ * live in the adapter, not the workflow.
  */
 
 // --- Response schema (instant query, vector result) ---
-// A sample's `value` is `[unixSeconds, "<stringified float>"]`.
 const Sample = Schema.Struct({
   value: Schema.Tuple([Schema.Number, Schema.String])
 })
 export const QueryResponse = Schema.Struct({
   status: Schema.Literals(["success", "error"]),
-  data: Schema.Struct({
-    result: Schema.Array(Sample)
-  })
+  data: Schema.Struct({ result: Schema.Array(Sample) })
 })
 export type QueryResponse = typeof QueryResponse.Type
 
-// --- Pure helpers (unit-tested; full HTTP path covered by the e2e demo) ---
-
-/** Render a Duration as a Prometheus range selector, e.g. `300s` (min 1s). */
-export const promRange = (window: Duration.Duration): string => {
-  const seconds = Math.max(1, Math.round(Duration.toSeconds(window)))
-  return `${seconds}s`
-}
+// --- Default PromQL builders (used to seed a deployment's default rules) ---
 
 /** Error rate as a fraction of 5xx over total requests for the service. */
-export const errorRateQuery = (service: string, window: Duration.Duration): string => {
-  const range = promRange(window)
-  return (
-    `sum(rate(http_requests_total{service="${service}",status=~"5.."}[${range}]))` +
-    ` / sum(rate(http_requests_total{service="${service}"}[${range}]))`
-  )
-}
+export const errorRateQuery = (service: string): string =>
+  `sum(rate(http_requests_total{service="${service}",status=~"5.."}[1m]))` +
+  ` / sum(rate(http_requests_total{service="${service}"}[1m]))`
 
 /** p99 request latency in milliseconds for the service. */
-export const p99LatencyQuery = (service: string, window: Duration.Duration): string => {
-  const range = promRange(window)
-  return (
-    `histogram_quantile(0.99, sum(rate(` +
-    `http_request_duration_seconds_bucket{service="${service}"}[${range}]` +
-    `)) by (le)) * 1000`
-  )
-}
+export const p99LatencyQuery = (service: string): string =>
+  `histogram_quantile(0.99, sum(rate(` +
+  `http_request_duration_seconds_bucket{service="${service}"}[1m]` +
+  `)) by (le)) * 1000`
 
 /**
  * Extract the scalar value from an instant-query response.
@@ -64,6 +49,40 @@ export const extractScalar = (response: QueryResponse): number => {
   const parsed = Number(first.value[1])
   return Number.isFinite(parsed) ? parsed : 0
 }
+
+// --- Request + resolver (deduplicates identical queries in a batch) ---
+
+interface PrometheusQuery extends Request.Request<number, MetricsUnavailable> {
+  readonly _tag: "PrometheusQuery"
+  readonly query: string
+}
+const PrometheusQuery = Request.tagged<PrometheusQuery>("PrometheusQuery")
+
+/**
+ * Build a resolver from a per-query fetcher. Within each batch, identical
+ * PromQL strings are fetched once and their result fanned back out.
+ */
+export const makeQueryResolver = (
+  fetch: (promql: string) => Effect.Effect<number, MetricsUnavailable>
+): RequestResolver.RequestResolver<PrometheusQuery> =>
+  RequestResolver.fromEffectTagged<PrometheusQuery>()({
+    PrometheusQuery: (entries) =>
+      Effect.gen(function*() {
+        const unique = [...new Set(entries.map((entry) => entry.request.query))]
+        const values = new Map<string, number>()
+        yield* Effect.forEach(
+          unique,
+          (promql) => fetch(promql).pipe(Effect.map((value) => values.set(promql, value))),
+          { concurrency: "unbounded" }
+        )
+        return entries.map((entry) => values.get(entry.request.query) ?? 0)
+      })
+  })
+
+/** Turn a resolver into a `query` function usable as the MetricsPort. */
+export const queryVia = (resolver: RequestResolver.RequestResolver<PrometheusQuery>) =>
+(promql: string): Effect.Effect<number, MetricsUnavailable> =>
+  Effect.request(PrometheusQuery({ query: promql }), resolver)
 
 // --- Layer ---
 
@@ -84,10 +103,9 @@ export const layer = (
     MetricsPort,
     Effect.gen(function*() {
       const client = yield* HttpClient.HttpClient
-
       const decodeResponse = Schema.decodeUnknownEffect(QueryResponse)
 
-      const query = (promql: string): Effect.Effect<number, MetricsUnavailable> =>
+      const fetch = (promql: string): Effect.Effect<number, MetricsUnavailable> =>
         client.get(`${options.url}/api/v1/query`, { urlParams: { query: promql } }).pipe(
           Effect.flatMap((response) => response.json),
           Effect.flatMap(decodeResponse),
@@ -102,15 +120,6 @@ export const layer = (
           )
         )
 
-      return {
-        collect: (params: CollectParams): Effect.Effect<MetricsSnapshot, MetricsUnavailable> =>
-          Effect.all(
-            {
-              errorRate: query(errorRateQuery(params.service, params.window)),
-              p99LatencyMs: query(p99LatencyQuery(params.service, params.window))
-            },
-            { concurrency: 2 }
-          )
-      }
+      return { query: queryVia(makeQueryResolver(fetch)) }
     })
   )

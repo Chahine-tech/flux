@@ -14,4 +14,8 @@ export const healthCheck = (params: {
   Effect.gen(function*() {
     const health = yield* HealthPort
     yield* health.check(params)
-  })
+  }).pipe(
+    Effect.withSpan("flux.healthCheck", {
+      attributes: { "flux.service": params.service, "flux.version": params.version }
+    })
+  )

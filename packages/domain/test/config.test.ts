@@ -17,7 +17,10 @@ const valid = {
       { percent: 100, monitorDuration: "0s", requiresApproval: false }
     ]
   },
-  thresholds: { maxErrorRate: 0.01, maxP99LatencyMs: 500 }
+  thresholds: [
+    { name: "errorRate", query: "rate(http_errors[1m])", max: 0.01 },
+    { name: "p99", query: "histogram_quantile(0.99, http_latency)", max: 500 }
+  ]
 }
 
 describe("DeploymentConfig", () => {
@@ -36,9 +39,15 @@ describe("DeploymentConfig", () => {
     expect(() => decode(bad)).toThrow()
   })
 
-  it("rejects an error rate above 1", () => {
+  it("rejects a rule with an empty query", () => {
     const bad = structuredClone(valid)
-    bad.thresholds.maxErrorRate = 2
+    bad.thresholds[0]!.query = ""
+    expect(() => decode(bad)).toThrow()
+  })
+
+  it("rejects an empty thresholds list", () => {
+    const bad = structuredClone(valid)
+    bad.thresholds = []
     expect(() => decode(bad)).toThrow()
   })
 

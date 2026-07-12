@@ -1,20 +1,17 @@
-import { Layer, ManagedRuntime, Redacted } from "effect"
+import { Effect, Layer, ManagedRuntime, Option, Redacted } from "effect"
 import { NodeChildProcessSpawner, NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node"
 import { HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/adapters"
+import { fluxConfig, layerFromToml } from "@flux/config"
 import type { AppServices } from "@flux/orchestration"
 
 /**
  * Composition root for the worker.
  *
- * The 4 adapter Layers are composed once and provided the Node platform Layers
- * (HttpClient / FileSystem / ChildProcessSpawner) they depend on. The resulting
- * `AppLayer` provides exactly the 4 ports the activities need.
- *
- * Config is read from the environment for N0; N1 replaces this with an Effect
- * `ConfigProvider` backed by `flux.config.toml`.
+ * Reads `flux.config.toml` (env-overridable) through @flux/config, then builds
+ * the 4 adapter Layers from it and provides them the Node platform Layers
+ * (HttpClient / FileSystem / ChildProcessSpawner). The resulting `AppLayer`
+ * provides exactly the 4 ports the activities need.
  */
-
-const env = (key: string, fallback: string): string => process.env[key] ?? fallback
 
 // NodeChildProcessSpawner requires FileSystem + Path, so feed those to it locally.
 const SpawnerLayer = NodeChildProcessSpawner.layer.pipe(
@@ -27,20 +24,33 @@ const PlatformLayer = Layer.mergeAll(
   SpawnerLayer
 )
 
-const AdaptersLayer = Layer.mergeAll(
-  PrometheusMetrics.layer({ url: env("PROMETHEUS_URL", "http://localhost:9090") }),
-  HttpHealth.layer({
-    url: ({ service, version }) => `http://${service}-${version}:8080/health`
-  }),
-  SlackNotify.layer({ webhookUrl: Redacted.make(env("SLACK_WEBHOOK_URL", "")) }),
-  NginxRouter.layer({
-    configPath: env("NGINX_CONFIG_PATH", "/etc/nginx/conf.d/flux-upstream.conf"),
-    reloadCommand: ["nginx", "-s", "reload"],
-    address: (service, version) => `${service}-${version}:8080`
-  })
-)
+const ConfigLayer = layerFromToml(process.env.FLUX_CONFIG ?? "flux.config.toml")
 
-export const AppLayer: Layer.Layer<AppServices> = AdaptersLayer.pipe(Layer.provide(PlatformLayer))
+export const AppLayer: Layer.Layer<AppServices> = Layer.unwrap(
+  Effect.gen(function*() {
+    // A malformed flux.config.toml is a fatal startup defect, not recoverable.
+    const config = yield* Effect.orDie(fluxConfig)
+    const reloadCommand = config.router.reloadCommand.split(/\s+/) as [string, ...ReadonlyArray<string>]
+
+    return Layer.mergeAll(
+      PrometheusMetrics.layer({ url: config.metrics.prometheusUrl }),
+      HttpHealth.layer({
+        url: ({ service, version }) => `http://${service}-${version}:8080/health`
+      }),
+      SlackNotify.layer({
+        webhookUrl: Option.getOrElse(config.notifications.slackWebhook, () => Redacted.make(""))
+      }),
+      NginxRouter.layer({
+        configPath: config.router.configPath,
+        reloadCommand,
+        address: (service, version) => `${service}-${version}:8080`
+      })
+    ).pipe(Layer.provide(PlatformLayer))
+  })
+).pipe(
+  Layer.provide(ConfigLayer),
+  Layer.provide(NodeFileSystem.layer)
+)
 
 export const makeRuntime = (): ManagedRuntime.ManagedRuntime<AppServices, never> =>
   ManagedRuntime.make(AppLayer)

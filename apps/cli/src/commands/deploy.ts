@@ -1,5 +1,6 @@
 import { Console, Effect, Schema } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
+import { PrometheusMetrics } from "@flux/adapters"
 import { DeploymentConfig } from "@flux/domain"
 import { configToInput } from "@flux/orchestration"
 import { startDeployment } from "../temporal.ts"
@@ -37,7 +38,10 @@ export const deploy = Command.make("deploy", {
           { percent: 100, monitorDuration: "0s", requiresApproval: false }
         ]
       },
-      thresholds: { maxErrorRate: 0.01, maxP99LatencyMs: 500 }
+      thresholds: [
+        { name: "errorRate", query: PrometheusMetrics.errorRateQuery(config.service), max: 0.01 },
+        { name: "p99", query: PrometheusMetrics.p99LatencyQuery(config.service), max: 500 }
+      ]
     }
 
     const decoded = yield* Schema.decodeUnknownEffect(DeploymentConfig)(raw)
