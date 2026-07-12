@@ -50,6 +50,9 @@ importers:
 
   .:
     devDependencies:
+      '@effect/language-service':
+        specifier: ^0.86.6
+        version: 0.86.6
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -325,6 +328,10 @@ importers:
         version: 4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0))
 
 packages:
+
+  '@effect/language-service@0.86.6':
+    resolution: {integrity: sha512-uwXbp+lWzt60bZnm6lG6S5DWy0m6TthUzV2hcQoiS6NzieEDm07tuBakscxOXoO+AU9+yTH+0TSIa9mEDt9dFA==}
+    hasBin: true
 
   '@effect/platform-node-shared@4.0.0-beta.97':
     resolution: {integrity: sha512-sAlygOlDLLERk7fC24f7Aa4G3wkEbGyyMEileHTHU2fThiPYSGMqNRK1LLnNr17m2+JR7BHbycwXkJkM18BAQw==}
@@ -1973,6 +1980,8 @@ packages:
     engines: {node: '>=12'}
 
 snapshots:
+
+  '@effect/language-service@0.86.6': {}
 
   '@effect/platform-node-shared@4.0.0-beta.97(effect@4.0.0-beta.97)':
     dependencies:

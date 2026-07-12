@@ -12,6 +12,7 @@
     "dev": "turbo run dev"
   },
   "devDependencies": {
+    "@effect/language-service": "^0.86.6",
     "@types/node": "catalog:",
     "turbo": "^2.10.4"
   }
