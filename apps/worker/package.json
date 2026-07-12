@@ -12,6 +12,7 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@flux/adapters": "workspace:*",
+    "@flux/application": "workspace:*",
     "@flux/orchestration": "workspace:*",
     "@temporalio/client": "catalog:",
     "@temporalio/worker": "catalog:",
