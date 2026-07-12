@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # N1 — flux self-instruments (Effect Metric module, ARCHITECTURE.md §5):
+  # - job_name: flux-worker
+  #   static_configs:
+  #     - targets: ["host.docker.internal:9464"]
+  # - job_name: flux-control-plane
+  #   static_configs:
+  #     - targets: ["host.docker.internal:9465"]
+
+  # N0-e2e — instrumented demo service behind nginx:
+  # - job_name: demo-service
+  #   static_configs:
+  #     - targets: ["demo:8080"]

@@ -1,0 +1,7 @@
+# Temporal dynamic config — local dev.
+# Workflow updates are enabled by default on recent servers;
+# flags kept explicit for documentation (used at N2).
+frontend.enableUpdateWorkflowExecution:
+  - value: true
+frontend.enableUpdateWorkflowExecutionAsyncAccepted:
+  - value: true
