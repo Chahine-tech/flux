@@ -6,7 +6,7 @@ import { RouterPort, RouterUnavailable, type SetTrafficWeightParams } from "@flu
  * nginx routing adapter — implements RouterPort by generating a weighted
  * upstream config and reloading nginx.
  *
- * Design (ARCHITECTURE.md D10, validated 2026-07-12):
+ * Design:
  * - Weight registry: a plain `Ref` (service → version → weight). A single map
  *   with no multi-cell atomic coordination — STM/TxRef would buy nothing here.
  *   STM is reserved for the multi-service coordinator (N4), where several

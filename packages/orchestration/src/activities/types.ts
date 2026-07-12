@@ -5,8 +5,7 @@ import type { DeploymentThresholds } from "../deployment-input.ts"
 /**
  * The activity contract shared between the workflow (which `proxyActivities`
  * against it) and the activity implementations. Type-only imports keep this
- * file — and therefore the workflow bundle — free of the Effect runtime
- * (ARCHITECTURE.md D6).
+ * file — and therefore the workflow bundle — free of the Effect runtime.
  *
  * `monitorStep` returns the plain, tagged `ThresholdEvaluation` so the workflow
  * can branch on `_tag` without ever importing the (Schema-backed, Effect-side)

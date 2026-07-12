@@ -7,7 +7,7 @@ import { ThresholdBreach } from "./thresholds.ts"
  *
  * Built with `Schema.TaggedErrorClass` so they are schema-validated,
  * yieldable in `Effect.gen`, matchable as tagged union members, and
- * serializable across the Temporal boundary (ARCHITECTURE.md D8).
+ * serializable across the Temporal boundary.
  *
  * Infrastructure failures (e.g. PrometheusUnreachable, NginxReloadFailed)
  * belong to the adapters, not here.

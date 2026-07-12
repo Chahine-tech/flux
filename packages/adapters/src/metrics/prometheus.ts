@@ -7,8 +7,8 @@ import type { MetricsSnapshot } from "@flux/domain"
  * Prometheus metrics adapter — implements MetricsPort against the Prometheus
  * HTTP API (`GET /api/v1/query`). Requires an `HttpClient` in context, which
  * the composition root provides (FetchHttpClient / NodeHttpClient). Transient
- * HTTP failures are retried here with a short jittered backoff (ARCHITECTURE.md
- * D9 — technical retries live in the adapter, not the workflow).
+ * HTTP failures are retried here with a short jittered backoff — technical
+ * retries live in the adapter, not the workflow.
  */
 
 // --- Response schema (instant query, vector result) ---

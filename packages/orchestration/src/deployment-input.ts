@@ -1,7 +1,7 @@
 /**
  * Workflow-facing types — deliberately Effect-free and fully serializable.
  *
- * The workflow bundle must stay free of the Effect runtime (ARCHITECTURE.md D6),
+ * The workflow bundle must stay free of the Effect runtime,
  * so durations cross this boundary as **milliseconds** (plain numbers), not
  * Effect `Duration` objects. The `configToInput` mapper (Effect side) converts
  * a domain `DeploymentConfig` into this shape before a workflow is started.

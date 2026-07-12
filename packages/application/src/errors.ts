@@ -6,7 +6,7 @@ import { Schema } from "effect"
  * infrastructure failures (e.g. PrometheusUnreachable, NginxReloadFailed)
  * into these so the application layer never names a specific technology.
  *
- * Schema-backed so they cross the Temporal boundary (ARCHITECTURE.md D8).
+ * Schema-backed so they cross the Temporal boundary.
  * Business failures (HealthCheckFailed, …) live in @flux/domain instead.
  */
 

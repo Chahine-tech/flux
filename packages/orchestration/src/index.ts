@@ -1,7 +1,7 @@
 /**
  * @flux/orchestration — Temporal workflows + activities.
  *
- * Two sealed worlds (ARCHITECTURE.md D6/D7):
+ * Two sealed worlds:
  * - `src/workflows/` : plain TypeScript, deterministic, ZERO `effect`
  *   imports. Bundled by Temporal via the `./workflows` entry point — NOT
  *   re-exported here, so nothing accidentally pulls it into an Effect context.

@@ -4,9 +4,9 @@ import { type Notification, NotifyFailed, NotifyPort } from "@flux/application"
 
 /**
  * Slack notification adapter — implements NotifyPort by POSTing to an incoming
- * webhook. The webhook URL is `Redacted` so it never leaks into logs/traces
- * (ARCHITECTURE.md §5). Any failure becomes `NotifyFailed` (non-fatal to a
- * deployment). Requires an `HttpClient`.
+ * webhook. The webhook URL is `Redacted` so it never leaks into logs/traces.
+ * Any failure becomes `NotifyFailed` (non-fatal to a deployment). Requires an
+ * `HttpClient`.
  */
 
 const ICONS: Record<Notification["kind"], string> = {

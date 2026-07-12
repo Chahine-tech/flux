@@ -6,7 +6,7 @@ import type { DeploymentInput } from "./deployment-input.ts"
  * Convert a domain `DeploymentConfig` (Effect `Duration` values) into the
  * Effect-free `DeploymentInput` a workflow consumes (durations as milliseconds).
  * Runs on the Effect side (CLI / client) before starting a workflow — never
- * imported by the workflow bundle (ARCHITECTURE.md D6).
+ * imported by the workflow bundle.
  */
 export const configToInput = (config: DeploymentConfig): DeploymentInput => ({
   service: config.service,

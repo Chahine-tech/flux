@@ -4,7 +4,7 @@ import { HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/a
 import type { AppServices } from "@flux/orchestration"
 
 /**
- * Composition root for the worker (ARCHITECTURE.md D7).
+ * Composition root for the worker.
  *
  * The 4 adapter Layers are composed once and provided the Node platform Layers
  * (HttpClient / FileSystem / ChildProcessSpawner) they depend on. The resulting

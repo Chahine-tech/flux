@@ -4,7 +4,7 @@ import { createActivities } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
 
 /**
- * flux worker — Temporal process (ARCHITECTURE.md D7).
+ * flux worker — Temporal process.
  *
  * Builds the ManagedRuntime once, wires the activities around it, and runs a
  * Temporal Worker. The runtime is disposed on shutdown. Workflows are bundled

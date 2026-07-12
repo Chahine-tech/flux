@@ -3,9 +3,9 @@ import type { DeploymentActivities } from "../activities/types.ts"
 import type { DeploymentInput, DeploymentResult } from "../deployment-input.ts"
 
 /**
- * Canary deployment workflow — deterministic, plain TypeScript, ZERO Effect
- * (ARCHITECTURE.md D6). It only sequences activities and branches on the plain
- * tagged results they return; all I/O and the threshold rule live in activities.
+ * Canary deployment workflow — deterministic, plain TypeScript, ZERO Effect.
+ * It only sequences activities and branches on the plain tagged results they
+ * return; all I/O and the threshold rule live in activities.
  *
  * N0 uses signals for approve/abort; N2 upgrades these to validated Updates.
  */

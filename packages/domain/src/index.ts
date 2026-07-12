@@ -4,7 +4,7 @@
  * Depends only on the `effect` core (never on `effect/unstable/*`).
  * Temporal workflows import only TYPES from here (`import type`) —
  * never values, so the Effect runtime never enters the workflow
- * bundle (ARCHITECTURE.md D6).
+ * bundle.
  */
 export * from "./config.ts"
 export * from "./duration.ts"

@@ -7,7 +7,7 @@ import type { DeploymentActivities } from "./types.ts"
 export type AppServices = HealthPort | MetricsPort | NotifyPort | RouterPort
 
 /**
- * Bridge Effect → Promise for Temporal (ARCHITECTURE.md D7).
+ * Bridge Effect → Promise for Temporal.
  *
  * Activities are built once at worker startup around a single `ManagedRuntime`
  * (holding the composed adapter Layers), instead of re-providing Layers per
@@ -15,7 +15,7 @@ export type AppServices = HealthPort | MetricsPort | NotifyPort | RouterPort
  *
  * Note: a failed Effect currently rejects the Promise, so Temporal retries per
  * the activity retry policy. Mapping typed `Exit`/`Cause` to non-retryable
- * `ApplicationFailure` for business errors is scheduled for N2 (ARCHITECTURE.md §5).
+ * `ApplicationFailure` for business errors is scheduled for N2.
  */
 export const createActivities = (
   runtime: ManagedRuntime.ManagedRuntime<AppServices, never>
