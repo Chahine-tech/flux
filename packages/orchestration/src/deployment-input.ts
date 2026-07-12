@@ -33,6 +33,30 @@ export interface DeploymentInput {
   readonly pollIntervalMs: number
 }
 
+/** Custom Temporal search-attribute names — powers `flux history` visibility queries. */
+export const SEARCH_ATTRIBUTES = {
+  service: "FluxService",
+  version: "FluxVersion",
+  status: "FluxStatus"
+} as const
+
+/** Live deployment state, exposed by the workflow's `status` query. */
+export interface DeploymentState {
+  readonly phase:
+    | "health-checking"
+    | "shifting"
+    | "monitoring"
+    | "awaiting-approval"
+    | "rolling-back"
+    | "done"
+  readonly service: string
+  readonly version: string
+  readonly currentPercent: number
+  readonly stepIndex: number
+  readonly totalSteps: number
+  readonly outcome?: DeploymentResult["kind"]
+}
+
 export type DeploymentResult =
   | { readonly kind: "Succeeded"; readonly service: string; readonly version: string }
   | {
@@ -40,6 +64,11 @@ export type DeploymentResult =
     readonly service: string
     readonly toVersion: string
     readonly atPercent: number
+    readonly breaches: ReadonlyArray<{
+      readonly metric: string
+      readonly observed: number
+      readonly limit: number
+    }>
   }
   | { readonly kind: "Aborted"; readonly service: string; readonly atPercent: number }
   | { readonly kind: "Failed"; readonly service: string; readonly reason: string }

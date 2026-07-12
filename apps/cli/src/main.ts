@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Command } from "effect/unstable/cli"
 import { deploy } from "./commands/deploy.ts"
+import { history } from "./commands/history.ts"
 import { abort, approve } from "./commands/signals.ts"
 import { status } from "./commands/status.ts"
 
@@ -13,7 +14,7 @@ import { status } from "./commands/status.ts"
  */
 const flux = Command.make("flux").pipe(
   Command.withDescription("Progressive deployment orchestrator"),
-  Command.withSubcommands([deploy, approve, abort, status])
+  Command.withSubcommands([deploy, approve, abort, status, history])
 )
 
 const run = Command.run(flux, { version: "0.0.0" })

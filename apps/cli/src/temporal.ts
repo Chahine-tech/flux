@@ -1,5 +1,11 @@
 import { Client, Connection } from "@temporalio/client"
-import type { DeploymentInput } from "@flux/orchestration"
+import { type DeploymentInput, type DeploymentState, SEARCH_ATTRIBUTES } from "@flux/orchestration"
+
+export interface DeploymentSummary {
+  readonly workflowId: string
+  readonly status: string
+  readonly startTime: string
+}
 
 /**
  * Thin Temporal client helpers for the CLI's `direct` mode (embedded client).
@@ -33,13 +39,31 @@ export const startDeployment = (input: DeploymentInput): Promise<string> =>
     return workflowId
   })
 
-export const signalDeployment = (
+/** approve/abort are validated Updates — a rejected update surfaces as an error. */
+export const updateDeployment = (
   workflowId: string,
-  signal: "approve" | "abort"
-): Promise<void> => withClient((client) => client.workflow.getHandle(workflowId).signal(signal))
+  update: "approve" | "abort"
+): Promise<void> => withClient((client) => client.workflow.getHandle(workflowId).executeUpdate(update))
 
-export const describeDeployment = (workflowId: string): Promise<string> =>
+/** Read the live canary state via the workflow's `status` query. */
+export const queryStatus = (workflowId: string): Promise<DeploymentState> =>
+  withClient((client) => client.workflow.getHandle(workflowId).query<DeploymentState>("status"))
+
+/** List recent deployments via advanced-visibility search attributes. */
+export const listDeployments = (service: string, limit: number): Promise<Array<DeploymentSummary>> =>
   withClient(async (client) => {
-    const description = await client.workflow.getHandle(workflowId).describe()
-    return description.status.name
+    const serviceFilter = service === "" ? "" : ` AND ${SEARCH_ATTRIBUTES.service} = '${service}'`
+    const query = `WorkflowType = 'deploymentWorkflow'${serviceFilter}`
+    const summaries: Array<DeploymentSummary> = []
+    for await (const execution of client.workflow.list({ query })) {
+      summaries.push({
+        workflowId: execution.workflowId,
+        status: execution.status.name,
+        startTime: execution.startTime.toISOString()
+      })
+      if (summaries.length >= limit) {
+        break
+      }
+    }
+    return summaries
   })

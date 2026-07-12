@@ -5,6 +5,7 @@ import { createActivities, metricsPrometheusText } from "@flux/orchestration"
 import type { ManagedRuntime } from "effect"
 import type { AppServices } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
+import { ensureSearchAttributes } from "./search-attributes.ts"
 
 /**
  * flux worker — Temporal process.
@@ -33,16 +34,18 @@ const startMetricsServer = (runtime: ManagedRuntime.ManagedRuntime<AppServices, 
 }
 
 const main = async (): Promise<void> => {
+  const address = process.env.TEMPORAL_ADDRESS ?? "localhost:7233"
+  const namespace = process.env.TEMPORAL_NAMESPACE ?? "default"
+
   const runtime = makeRuntime()
   const metricsServer = startMetricsServer(runtime)
-  const connection = await NativeConnection.connect({
-    address: process.env.TEMPORAL_ADDRESS ?? "localhost:7233"
-  })
+  await ensureSearchAttributes(address, namespace)
+  const connection = await NativeConnection.connect({ address })
 
   try {
     const worker = await Worker.create({
       connection,
-      namespace: process.env.TEMPORAL_NAMESPACE ?? "default",
+      namespace,
       taskQueue: TASK_QUEUE,
       workflowsPath: fileURLToPath(import.meta.resolve("@flux/orchestration/workflows")),
       activities: createActivities(runtime)
