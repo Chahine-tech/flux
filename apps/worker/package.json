@@ -14,6 +14,7 @@
     "@flux/adapters": "workspace:*",
     "@flux/application": "workspace:*",
     "@flux/config": "workspace:*",
+    "@flux/domain": "workspace:*",
     "@flux/orchestration": "workspace:*",
     "@temporalio/client": "catalog:",
     "@temporalio/worker": "catalog:",

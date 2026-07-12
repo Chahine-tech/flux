@@ -1,4 +1,5 @@
 import { Effect, Layer, ManagedRuntime, Option, Redacted } from "effect"
+import { Otlp } from "effect/unstable/observability"
 import { NodeChildProcessSpawner, NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node"
 import { HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/adapters"
 import { fluxConfig, layerFromToml } from "@flux/config"
@@ -26,7 +27,14 @@ const PlatformLayer = Layer.mergeAll(
 
 const ConfigLayer = layerFromToml(process.env.FLUX_CONFIG ?? "flux.config.toml")
 
-export const AppLayer: Layer.Layer<AppServices> = Layer.unwrap(
+// Export Effect spans (activities, use cases, Prometheus HTTP calls) via OTLP.
+// Effect v4 has a native OTLP tracer — no external OpenTelemetry SDK needed.
+const TracingLayer = Otlp.layerJson({
+  baseUrl: process.env.OTLP_ENDPOINT ?? "http://localhost:4318",
+  resource: { serviceName: "flux-worker" }
+}).pipe(Layer.provide(NodeHttpClient.layerUndici))
+
+const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
   Effect.gen(function*() {
     // A malformed flux.config.toml is a fatal startup defect, not recoverable.
     const config = yield* Effect.orDie(fluxConfig)
@@ -51,6 +59,8 @@ export const AppLayer: Layer.Layer<AppServices> = Layer.unwrap(
   Layer.provide(ConfigLayer),
   Layer.provide(NodeFileSystem.layer)
 )
+
+export const AppLayer: Layer.Layer<AppServices> = Layer.mergeAll(CoreLayer, TracingLayer)
 
 export const makeRuntime = (): ManagedRuntime.ManagedRuntime<AppServices, never> =>
   ManagedRuntime.make(AppLayer)

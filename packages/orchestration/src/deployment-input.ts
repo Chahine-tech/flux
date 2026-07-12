@@ -9,9 +9,11 @@
  * This file must never import `effect` (directly or transitively).
  */
 
-export interface DeploymentThresholds {
-  readonly maxErrorRate: number
-  readonly maxP99LatencyMs: number
+/** A metric rule crossing to the workflow: watch `query`, breach if `> max`. */
+export interface DeploymentRule {
+  readonly name: string
+  readonly query: string
+  readonly max: number
 }
 
 export interface DeploymentStepInput {
@@ -26,7 +28,7 @@ export interface DeploymentInput {
   readonly version: string
   readonly previousVersion: string
   readonly steps: ReadonlyArray<DeploymentStepInput>
-  readonly thresholds: DeploymentThresholds
+  readonly rules: ReadonlyArray<DeploymentRule>
   /** How often each step samples metrics while monitoring, in milliseconds. */
   readonly pollIntervalMs: number
 }

@@ -62,6 +62,9 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.0-beta.97(effect@4.0.0-beta.97)(ioredis@5.11.1)
+      '@flux/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@flux/application':
         specifier: workspace:*
         version: link:../../packages/application
@@ -139,6 +142,9 @@ importers:
       '@flux/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@flux/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@flux/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration

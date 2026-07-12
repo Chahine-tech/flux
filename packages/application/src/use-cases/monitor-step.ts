@@ -1,5 +1,5 @@
 import { Duration, Effect, Option, Schedule, Stream } from "effect"
-import { evaluateThresholds, type Thresholds, type ThresholdEvaluation } from "@flux/domain"
+import { evaluateThresholds, type MetricReadings, type MetricRule, type ThresholdEvaluation } from "@flux/domain"
 import type { MetricsUnavailable } from "../errors.ts"
 import { MetricsPort } from "../ports/metrics.ts"
 
@@ -10,25 +10,33 @@ const within: ThresholdEvaluation = { _tag: "Within" }
 /**
  * Use case: monitor a canary step as a `Stream`.
  *
- * Rather than sleeping once then taking a single sample, this polls the metrics
- * every `pollInterval` for up to `window`, evaluates each snapshot against the
- * failure budget, and **stops early** the moment a breach is seen
- * (`Stream.takeUntil`). The outcome is the last evaluation: `Breached` if a poll
- * tripped a threshold, otherwise `Within` once the window elapses.
+ * Each poll evaluates every rule concurrently through the MetricsPort. Because
+ * the queries hit the port together, its RequestResolver deduplicates any that
+ * share a PromQL into a single backend fetch. The readings are compared to the
+ * rules; monitoring polls every `pollInterval` for up to `window` and stops
+ * early (`Stream.takeUntil`) the moment a rule breaches.
  */
 export const monitorStep = (params: {
   readonly service: string
   readonly version: string
   readonly window: Duration.Duration
   readonly pollInterval: Duration.Duration
-  readonly thresholds: Thresholds
+  readonly rules: ReadonlyArray<MetricRule>
 }): Effect.Effect<ThresholdEvaluation, MetricsUnavailable, MetricsPort> =>
   Effect.gen(function*() {
     const metrics = yield* MetricsPort
 
-    const pollAndEvaluate = metrics
-      .collect({ service: params.service, version: params.version, window: params.window })
-      .pipe(Effect.map((snapshot) => evaluateThresholds(snapshot, params.thresholds)))
+    const pollAndEvaluate = Effect.gen(function*() {
+      const readings: Record<string, number> = {}
+      yield* Effect.forEach(
+        params.rules,
+        (rule) => metrics.query(rule.query).pipe(Effect.map((value) => {
+          readings[rule.name] = value
+        })),
+        { concurrency: "unbounded" }
+      )
+      return evaluateThresholds(readings as MetricReadings, params.rules)
+    })
 
     const windowMs = Duration.toMillis(params.window)
     const intervalMs = Math.max(1, Duration.toMillis(params.pollInterval))
@@ -42,4 +50,8 @@ export const monitorStep = (params: {
     )
 
     return Option.getOrElse(lastEvaluation, () => within)
-  })
+  }).pipe(
+    Effect.withSpan("flux.monitorStep", {
+      attributes: { "flux.service": params.service, "flux.version": params.version }
+    })
+  )

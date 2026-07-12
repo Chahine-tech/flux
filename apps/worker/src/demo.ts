@@ -26,21 +26,18 @@ const makeDemoLayer = Effect.gen(function*() {
   const DemoRouter = Layer.succeed(RouterPort, {
     setTrafficWeight: (params) =>
       Ref.update(weights, (w) => ({ ...w, [params.version]: params.weight })).pipe(
-        Effect.zipRight(
+        Effect.andThen(
           Console.log(`  [router]  ${params.service} → ${params.version} @ ${params.weight}%`)
         )
       )
   })
 
+  // The new version's error rate rises once it takes >= 50% of traffic. The
+  // query string is ignored — both demo rules share it, so the RequestResolver
+  // fetches it once per poll.
   const DemoMetrics = Layer.succeed(MetricsPort, {
-    collect: (params) =>
-      Ref.get(weights).pipe(
-        Effect.map((w) =>
-          (w[params.version] ?? 0) >= 50
-            ? { errorRate: 0.05, p99LatencyMs: 900 }
-            : { errorRate: 0.002, p99LatencyMs: 120 }
-        )
-      )
+    query: () =>
+      Ref.get(weights).pipe(Effect.map((w) => ((w["v2.1.0"] ?? 0) >= 50 ? 0.08 : 0.002)))
   })
 
   const DemoHealth = Layer.succeed(HealthPort, {
@@ -63,7 +60,11 @@ const demoInput: DeploymentInput = {
     { percent: 50, monitorMs: 300, requiresApproval: false },
     { percent: 100, monitorMs: 0, requiresApproval: false }
   ],
-  thresholds: { maxErrorRate: 0.01, maxP99LatencyMs: 500 },
+  // Two rules share the same query -> deduped to one fetch per poll.
+  rules: [
+    { name: "errorRate", query: "flux_demo_error_rate", max: 0.01 },
+    { name: "errorRateWarn", query: "flux_demo_error_rate", max: 0.05 }
+  ],
   pollIntervalMs: 100
 }
 

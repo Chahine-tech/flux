@@ -20,10 +20,11 @@ export const configToInput = (config: DeploymentConfig): DeploymentInput => ({
       ? { approvalTimeoutMs: Duration.toMillis(step.approvalTimeout) }
       : {})
   })),
-  thresholds: {
-    maxErrorRate: config.thresholds.maxErrorRate,
-    maxP99LatencyMs: config.thresholds.maxP99LatencyMs
-  },
+  rules: config.thresholds.map((rule) => ({
+    name: rule.name,
+    query: rule.query,
+    max: rule.max
+  })),
   // Operational default; a per-deployment override can come from config later.
   pollIntervalMs: 5_000
 })

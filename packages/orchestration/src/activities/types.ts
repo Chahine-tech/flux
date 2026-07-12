@@ -1,6 +1,6 @@
 import type { Notification } from "@flux/application"
 import type { ThresholdEvaluation } from "@flux/domain"
-import type { DeploymentThresholds } from "../deployment-input.ts"
+import type { DeploymentRule } from "../deployment-input.ts"
 
 /**
  * The activity contract shared between the workflow (which `proxyActivities`
@@ -25,7 +25,7 @@ export interface DeploymentActivities {
     readonly version: string
     readonly windowMs: number
     readonly pollIntervalMs: number
-    readonly thresholds: DeploymentThresholds
+    readonly rules: ReadonlyArray<DeploymentRule>
   }): Promise<ThresholdEvaluation>
 
   notify(params: {
@@ -33,4 +33,7 @@ export interface DeploymentActivities {
     readonly service: string
     readonly message: string
   }): Promise<void>
+
+  /** Record the terminal outcome of a deployment for self-instrumentation. */
+  recordOutcome(outcome: string): Promise<void>
 }
