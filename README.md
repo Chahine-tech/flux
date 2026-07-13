@@ -31,19 +31,20 @@ Rollback is a saga. The first traffic shift registers a compensation that puts
 the previous version back at 100%, and any ending that isn't a success runs it.
 
 ```
-flux deploy --service api --version v2 ...
+  flux deploy --service api --version v2
         │
         ▼
-┌──────────────────────────────┐        ┌───────────────────────────┐
-│  Temporal (durable, no Effect)│       │  worker (Effect runtime)  │
-│  deploymentWorkflow           │  activities →  health (local act.) │
-│   1. health check ────────────┼──────►│                           │
-│   2. shift 10% ───────────────┼──────►│   router  (nginx reload)  │
-│   3. monitor (heartbeat) ─────┼──────►│   metrics (Prometheus)    │
-│   4. breach? → roll back      │       │   notify  (Slack)         │
-│   5. approve gate (update)    │       └───────────────────────────┘
-│   6. next step … → Succeeded  │
-└──────────────────────────────┘
+  ┌─────────────────────────────────┐            ┌───────────────────────────┐
+  │ Temporal   (durable, no Effect) │            │ worker   (Effect runtime) │
+  │ deploymentWorkflow              │            │                           │
+  │                                 │            │ activities:               │
+  │  1. health check                │  ───────►  │   health   (local)        │
+  │  2. shift 10%                   │            │   router   (nginx reload) │
+  │  3. monitor (heartbeat)         │            │   metrics  (Prometheus)   │
+  │  4. breach?  -> roll back       │            │   notify   (Slack)        │
+  │  5. approve gate (update)       │            └───────────────────────────┘
+  │  6. -> Succeeded                │
+  └─────────────────────────────────┘
 ```
 
 ## Some things I wanted to try
