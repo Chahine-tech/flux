@@ -12,11 +12,9 @@ import {
 
 /**
  * Port to Temporal for the control plane — the single place the HTTP handlers
- * (and, later, the poller) reach the cluster. Temporal's client is
- * Promise-based, so every method is wrapped in an Effect and its Promise
- * rejections are classified into the API's typed errors, keeping the HTTP layer
- * pure. The connection is a scoped resource: opened when the Layer is built,
- * closed when the process shuts down.
+ * and the pollers reach the cluster. Temporal's client is Promise-based, so
+ * every method is wrapped in an Effect and its Promise rejections are classified
+ * into the API's typed errors, keeping the callers pure.
  */
 export class TemporalClient extends Context.Service<TemporalClient, {
   readonly start: (request: TriggerDeploymentRequest) => Effect.Effect<string>
@@ -50,11 +48,106 @@ export interface ClosedDeployment {
 const firstString = (value: unknown): string | undefined =>
   Array.isArray(value) && typeof value[0] === "string" ? value[0] : undefined
 
+/**
+ * Build the port around an existing Temporal `Client`. Kept separate from the
+ * connection lifecycle so an integration test can drive the exact client code
+ * production uses against a test server's client.
+ */
+export const make = (client: Client): typeof TemporalClient.Service => {
+  const handle = (workflowId: string) => client.workflow.getHandle(workflowId)
+
+  return {
+    start: (request) =>
+      Effect.promise(async () => {
+        const workflowId = `dep-${request.service}-${Date.now()}`
+        await client.workflow.start(WORKFLOW_TYPE, {
+          taskQueue: TASK_QUEUE,
+          workflowId,
+          // The request is structurally the workflow's Effect-free input (D6).
+          args: [request as DeploymentInput]
+        })
+        return workflowId
+      }),
+
+    status: (workflowId) =>
+      Effect.tryPromise({
+        try: () => handle(workflowId).query<DeploymentState>("status"),
+        catch: (error) => classifyNotFound(error, workflowId)
+      }),
+
+    list: (service, limit) =>
+      Effect.promise(async () => {
+        const filter = service === undefined || service === ""
+          ? ""
+          : ` AND ${SEARCH_ATTRIBUTES.service} = '${service}'`
+        const query = `WorkflowType = '${WORKFLOW_TYPE}'${filter}`
+        const summaries: Array<DeploymentSummary> = []
+        for await (const execution of client.workflow.list({ query })) {
+          summaries.push({
+            workflowId: execution.workflowId,
+            status: execution.status.name,
+            startTime: execution.startTime.toISOString()
+          })
+          if (summaries.length >= limit) break
+        }
+        return summaries
+      }),
+
+    listRunningIds: (limit) =>
+      Effect.promise(async () => {
+        const query = `WorkflowType = '${WORKFLOW_TYPE}' AND ExecutionStatus = 'Running'`
+        const ids: Array<string> = []
+        for await (const execution of client.workflow.list({ query })) {
+          ids.push(execution.workflowId)
+          if (ids.length >= limit) break
+        }
+        return ids
+      }),
+
+    listClosed: (limit) =>
+      Effect.promise(async () => {
+        // flux workflows always complete normally (they return a result even on
+        // rollback/failure); the business outcome lives in FluxStatus.
+        const query = `WorkflowType = '${WORKFLOW_TYPE}' AND ExecutionStatus = 'Completed'`
+        const closed: Array<ClosedDeployment> = []
+        for await (const execution of client.workflow.list({ query })) {
+          const attributes = execution.searchAttributes as Record<string, ReadonlyArray<unknown> | undefined>
+          const status = firstString(attributes["FluxStatus"])
+          if (status === undefined || execution.closeTime === undefined) continue
+          closed.push({
+            workflowId: execution.workflowId,
+            service: firstString(attributes["FluxService"]) ?? execution.workflowId,
+            status,
+            durationMs: execution.closeTime.getTime() - execution.startTime.getTime()
+          })
+          if (closed.length >= limit) break
+        }
+        return closed
+      }),
+
+    approve: (workflowId) =>
+      Effect.tryPromise({
+        try: () => handle(workflowId).executeUpdate("approve"),
+        catch: (error) => classifyUpdate(error, workflowId)
+      }),
+
+    abort: (workflowId) =>
+      Effect.tryPromise({
+        try: () => handle(workflowId).executeUpdate("abort"),
+        catch: (error) => classifyNotFound(error, workflowId)
+      })
+  }
+}
+
 export interface TemporalClientConfig {
   readonly address: string
   readonly namespace: string
 }
 
+/**
+ * Production layer: open a Temporal connection (scoped — closed on shutdown) and
+ * build the port around it.
+ */
 export const layer = (config: TemporalClientConfig): Layer.Layer<TemporalClient> =>
   Layer.effect(
     TemporalClient,
@@ -63,93 +156,13 @@ export const layer = (config: TemporalClientConfig): Layer.Layer<TemporalClient>
         Effect.promise(() => Connection.connect({ address: config.address })),
         (conn) => Effect.promise(() => conn.close())
       )
-      const client = new Client({ connection, namespace: config.namespace })
-
-      const handle = (workflowId: string) => client.workflow.getHandle(workflowId)
-
-      return {
-        start: (request) =>
-          Effect.promise(async () => {
-            const workflowId = `dep-${request.service}-${Date.now()}`
-            await client.workflow.start(WORKFLOW_TYPE, {
-              taskQueue: TASK_QUEUE,
-              workflowId,
-              // The request is structurally the workflow's Effect-free input (D6).
-              args: [request as DeploymentInput]
-            })
-            return workflowId
-          }),
-
-        status: (workflowId) =>
-          Effect.tryPromise({
-            try: () => handle(workflowId).query<DeploymentState>("status"),
-            catch: (error) => classifyNotFound(error, workflowId)
-          }),
-
-        list: (service, limit) =>
-          Effect.promise(async () => {
-            const filter = service === undefined || service === ""
-              ? ""
-              : ` AND ${SEARCH_ATTRIBUTES.service} = '${service}'`
-            const query = `WorkflowType = '${WORKFLOW_TYPE}'${filter}`
-            const summaries: Array<DeploymentSummary> = []
-            for await (const execution of client.workflow.list({ query })) {
-              summaries.push({
-                workflowId: execution.workflowId,
-                status: execution.status.name,
-                startTime: execution.startTime.toISOString()
-              })
-              if (summaries.length >= limit) break
-            }
-            return summaries
-          }),
-
-        listRunningIds: (limit) =>
-          Effect.promise(async () => {
-            const query = `WorkflowType = '${WORKFLOW_TYPE}' AND ExecutionStatus = 'Running'`
-            const ids: Array<string> = []
-            for await (const execution of client.workflow.list({ query })) {
-              ids.push(execution.workflowId)
-              if (ids.length >= limit) break
-            }
-            return ids
-          }),
-
-        listClosed: (limit) =>
-          Effect.promise(async () => {
-            // flux workflows always complete normally (they return a result even
-            // on rollback/failure); the business outcome lives in FluxStatus.
-            const query = `WorkflowType = '${WORKFLOW_TYPE}' AND ExecutionStatus = 'Completed'`
-            const closed: Array<ClosedDeployment> = []
-            for await (const execution of client.workflow.list({ query })) {
-              const attributes = execution.searchAttributes as Record<string, ReadonlyArray<unknown> | undefined>
-              const status = firstString(attributes["FluxStatus"])
-              if (status === undefined || execution.closeTime === undefined) continue
-              closed.push({
-                workflowId: execution.workflowId,
-                service: firstString(attributes["FluxService"]) ?? execution.workflowId,
-                status,
-                durationMs: execution.closeTime.getTime() - execution.startTime.getTime()
-              })
-              if (closed.length >= limit) break
-            }
-            return closed
-          }),
-
-        approve: (workflowId) =>
-          Effect.tryPromise({
-            try: () => handle(workflowId).executeUpdate("approve"),
-            catch: (error) => classifyUpdate(error, workflowId)
-          }),
-
-        abort: (workflowId) =>
-          Effect.tryPromise({
-            try: () => handle(workflowId).executeUpdate("abort"),
-            catch: (error) => classifyNotFound(error, workflowId)
-          })
-      }
+      return make(new Client({ connection, namespace: config.namespace }))
     })
   )
+
+/** Layer over an already-built client (integration tests, embedding). */
+export const layerFromClient = (client: Client): Layer.Layer<TemporalClient> =>
+  Layer.succeed(TemporalClient, make(client))
 
 /** Missing workflow → 404; anything else is an unexpected defect (Effect dies). */
 const classifyNotFound = (error: unknown, workflowId: string): DeploymentNotFound => {

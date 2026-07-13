@@ -19,6 +19,8 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@temporalio/testing": "catalog:",
+    "@temporalio/worker": "catalog:",
     "@types/node": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
