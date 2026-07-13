@@ -32,6 +32,7 @@ const okActivities = (): DeploymentActivities => ({
   setTrafficWeight: async () => {},
   monitorStep: async () => ({ _tag: "Within" }),
   notify: async () => {},
+  readRouterState: async () => [],
   recordOutcome: async () => {}
 })
 

@@ -3,10 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "flux": "./dist/main.mjs"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "dev": "tsx src/main.ts"
+    "dev": "tsx src/main.ts",
+    "build": "tsdown"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -20,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "tsdown": "^0.22.7",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

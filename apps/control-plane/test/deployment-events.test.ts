@@ -61,4 +61,31 @@ describe("deployment events poller", () => {
       expect(collected.map((s) => s.currentPercent)).toEqual([10, 30, 50])
     }).pipe(Effect.provide(EventsLive))
   })
+
+  it.effect("calls onDeploymentEnded when a tracked deployment leaves the running set", () => {
+    let running = ["wf1"]
+    const ended: Array<string> = []
+    const FakeTemporal = Layer.succeed(TemporalClient, {
+      start: () => Effect.succeed("wf1"),
+      status: () => Effect.succeed(state(50)), // service "api"
+      list: () => Effect.succeed([]),
+      listRunningIds: () => Effect.sync(() => running),
+      listClosed: () => Effect.succeed([]),
+      approve: () => Effect.void,
+      abort: () => Effect.void
+    })
+    const EventsLive = layer({
+      pollInterval: "5 seconds",
+      maxTracked: 100,
+      onDeploymentEnded: (service) => Effect.sync(() => ended.push(service))
+    }).pipe(Layer.provide(FakeTemporal))
+
+    return Effect.gen(function*() {
+      yield* DeploymentEvents
+      yield* TestClock.adjust("1 second") // first tick tracks wf1 (running)
+      running = [] // the deployment finishes
+      yield* TestClock.adjust("5 seconds") // next tick sees it gone → released
+      expect(ended).toEqual(["api"])
+    }).pipe(Effect.provide(EventsLive))
+  })
 })

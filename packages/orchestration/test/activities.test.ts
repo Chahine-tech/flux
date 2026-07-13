@@ -7,7 +7,7 @@ const runtime = ManagedRuntime.make(
   Layer.mergeAll(
     Layer.succeed(HealthPort, { check: () => Effect.void }),
     Layer.succeed(MetricsPort, { query: () => Effect.succeed(0) }),
-    Layer.succeed(RouterPort, { setTrafficWeight: () => Effect.void }),
+    Layer.succeed(RouterPort, { setTrafficWeight: () => Effect.void, readState: () => Effect.succeed([]) }),
     Layer.succeed(NotifyPort, { send: () => Effect.void })
   )
 )

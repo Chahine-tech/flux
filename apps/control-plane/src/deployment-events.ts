@@ -26,6 +26,12 @@ export interface DeploymentEventsConfig {
   readonly pollInterval: Duration.Input
   /** Upper bound on deployments tracked per tick (visibility page size). */
   readonly maxTracked: number
+  /**
+   * Called once with the service name when a tracked deployment leaves the
+   * running set (it finished). Used to release its admission slot (N4/D14).
+   * Defaults to a no-op so the poller stays decoupled from admission control.
+   */
+  readonly onDeploymentEnded?: (service: string) => Effect.Effect<void>
 }
 
 /** Two states are equal for delta purposes when their observable fields match. */
@@ -45,10 +51,14 @@ export const layer = (
       const pubsub = yield* PubSub.unbounded<DeploymentEvent>()
       const lastSeen = yield* Ref.make(HashMap.empty<string, DeploymentState>())
 
+      const onEnded = config.onDeploymentEnded ?? (() => Effect.void)
+
       // One poll: publish a delta for every running deployment whose state
-      // changed (or is newly seen), then forget deployments that stopped running.
+      // changed (or is newly seen), then release the slot of any deployment that
+      // was running and has now finished.
       const tick = Effect.gen(function*() {
         const runningIds = yield* temporal.listRunningIds(config.maxTracked)
+        const runningSet = new Set(runningIds)
         const previous = yield* Ref.get(lastSeen)
         let next = HashMap.empty<string, DeploymentState>()
 
@@ -62,6 +72,15 @@ export const layer = (
             yield* PubSub.publish(pubsub, { workflowId, state: state.value })
           }
           next = HashMap.set(next, workflowId, state.value)
+        }
+
+        // Deployments we were tracking that are no longer running have ended.
+        for (const workflowId of HashMap.keys(previous)) {
+          if (runningSet.has(workflowId)) continue
+          const last = HashMap.get(previous, workflowId)
+          if (Option.isSome(last)) {
+            yield* onEnded(last.value.service)
+          }
         }
 
         yield* Ref.set(lastSeen, next)

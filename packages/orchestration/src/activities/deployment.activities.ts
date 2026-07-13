@@ -1,11 +1,11 @@
 import { Duration, Effect, type ManagedRuntime, Schema, Tracer } from "effect"
 import type { HealthPort, MetricsPort, NotifyPort, RouterPort } from "@flux/application"
-import { healthCheck, monitorStep, notify, shiftTraffic } from "@flux/application"
+import { healthCheck, monitorStep, notify, readRouterState, shiftTraffic } from "@flux/application"
 import { Context as ActivityContext } from "@temporalio/activity"
 import { ApplicationFailure } from "@temporalio/common"
 import { recordOutcome, recordTrafficShift } from "../metrics.ts"
 import { type FluxError, toApplicationFailure } from "./activity-error.ts"
-import { HealthCheckParams, MonitorStepParams, NotifyParams, SetTrafficWeightParams } from "./schemas.ts"
+import { HealthCheckParams, MonitorStepParams, NotifyParams, ReadRouterStateParams, SetTrafficWeightParams } from "./schemas.ts"
 import type { DeploymentActivities } from "./types.ts"
 
 /** Services the worker's ManagedRuntime must provide (the 4 ports). */
@@ -37,6 +37,36 @@ const linkToDeployment = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effec
   return parent === undefined ? effect : effect.pipe(Effect.withParentSpan(parent))
 }
 
+const HEARTBEAT_INTERVAL = Duration.seconds(10)
+
+/**
+ * Wrap a long-running activity effect (monitoring, N4/D16) with:
+ * - a heartbeat daemon, so Temporal knows the activity is alive and can time it
+ *   out / cancel it (and so it can be retried on a fresh worker if this one dies);
+ * - cancellation: `Context.current().cancelled` rejects with `CancelledFailure`
+ *   when the workflow cancels the activity (an abort), which we surface raw —
+ *   this races the work, so an in-flight monitor stops at once instead of running
+ *   to the end of its window.
+ *
+ * The cancellation must already be past the error-mapping to `ApplicationFailure`
+ * so `CancelledFailure` reaches Temporal unchanged and is recognised as a cancel.
+ */
+const withHeartbeatAndCancellation = <A, E>(
+  effect: Effect.Effect<A, E, AppServices>
+): Effect.Effect<A, E, AppServices> =>
+  Effect.gen(function*() {
+    const ctx = ActivityContext.current()
+    yield* Effect.forkScoped(
+      Effect.sync(() => ctx.heartbeat()).pipe(Effect.delay(HEARTBEAT_INTERVAL), Effect.forever)
+    )
+    const cancelled = Effect.tryPromise({
+      try: () => ctx.cancelled as Promise<never>,
+      // CancelledFailure — thrown raw; typed as E only to satisfy `raceFirst`.
+      catch: (error) => error as E
+    })
+    return yield* Effect.raceFirst(effect, cancelled)
+  }).pipe(Effect.scoped)
+
 /**
  * Bridge Effect → Promise for Temporal.
  *
@@ -67,6 +97,7 @@ export const createActivities = (
   const decodeShift = Schema.decodeUnknownEffect(SetTrafficWeightParams)
   const decodeMonitor = Schema.decodeUnknownEffect(MonitorStepParams)
   const decodeNotify = Schema.decodeUnknownEffect(NotifyParams)
+  const decodeReadState = Schema.decodeUnknownEffect(ReadRouterStateParams)
 
   return {
     healthCheck: (params) => validated(decodeHealth, params, (p) => linkToDeployment(healthCheck(p))),
@@ -76,16 +107,31 @@ export const createActivities = (
         linkToDeployment(shiftTraffic(p).pipe(Effect.tap(() => recordTrafficShift)))),
 
     monitorStep: (params) =>
-      validated(decodeMonitor, params, (p) =>
-        linkToDeployment(monitorStep({
-          service: p.service,
-          version: p.version,
-          window: Duration.millis(p.windowMs),
-          pollInterval: Duration.millis(p.pollIntervalMs),
-          rules: p.rules
-        }))),
+      runtime.runPromise(
+        decodeMonitor(params).pipe(
+          Effect.mapError((error) =>
+            ApplicationFailure.nonRetryable(`invalid activity input: ${String(error)}`, "InvalidActivityInput")
+          ),
+          Effect.flatMap((p) =>
+            withHeartbeatAndCancellation(
+              Effect.mapError(
+                linkToDeployment(monitorStep({
+                  service: p.service,
+                  version: p.version,
+                  window: Duration.millis(p.windowMs),
+                  pollInterval: Duration.millis(p.pollIntervalMs),
+                  rules: p.rules
+                })),
+                toApplicationFailure
+              )
+            ))
+        )
+      ),
 
     notify: (params) => validated(decodeNotify, params, (p) => linkToDeployment(notify(p))),
+
+    readRouterState: (params) =>
+      validated(decodeReadState, params, (p) => linkToDeployment(readRouterState(p.service))),
 
     // Metric updates cannot fail (in-memory), so they skip validation/mapping.
     recordOutcome: (outcome) => runtime.runPromise(recordOutcome(outcome))

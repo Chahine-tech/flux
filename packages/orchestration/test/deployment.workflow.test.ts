@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url"
+import { Context } from "@temporalio/activity"
 import { ApplicationFailure } from "@temporalio/common"
 import { TestWorkflowEnvironment } from "@temporalio/testing"
 import { Worker } from "@temporalio/worker"
@@ -37,6 +38,7 @@ const okActivities = (): DeploymentActivities => ({
   setTrafficWeight: async () => {},
   monitorStep: async () => ({ _tag: "Within" }),
   notify: async () => {},
+  readRouterState: async () => [],
   recordOutcome: async () => {}
 })
 
@@ -167,6 +169,84 @@ describe("deploymentWorkflow", () => {
     expect(result.kind).toBe("Aborted")
     // The compensation restored the previous version to 100% traffic.
     expect(shifts.at(-1)).toEqual({ version: "v2.0.8", weight: 100 })
+  })
+
+  it("cancels an in-flight monitor on abort, instead of waiting out the window (N4)", async () => {
+    // A monitor that never returns on its own: it heartbeats and waits to be
+    // cancelled. Without the workflow's CancellationScope, the abort would set a
+    // flag but the workflow would block here forever.
+    const cancellableMonitor = async (): Promise<never> => {
+      for (;;) {
+        Context.current().heartbeat()
+        await Context.current().sleep(50) // throws CancelledFailure once cancelled
+      }
+    }
+    const input: DeploymentInput = {
+      ...baseInput,
+      steps: [{ percent: 50, monitorMs: 600_000, requiresApproval: false }]
+    }
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowsPath,
+      activities: { ...okActivities(), monitorStep: cancellableMonitor }
+    })
+    const result = (await worker.runUntil(async () => {
+      const handle = await env.client.workflow.start("deploymentWorkflow", {
+        taskQueue: TASK_QUEUE,
+        workflowId: `wf-cancel-${Date.now()}`,
+        args: [input]
+      })
+      for (let i = 0; i < 100; i++) {
+        if ((await handle.query<DeploymentState>("status")).phase === "monitoring") break
+        await new Promise((r) => setTimeout(r, 50))
+      }
+      await handle.executeUpdate("abort")
+      return handle.result()
+    })) as DeploymentResult
+    expect(result.kind).toBe("Aborted")
+    if (result.kind === "Aborted") {
+      expect(result.atPercent).toBe(50)
+    }
+  })
+
+  it("continues-as-new mid-rollout and still completes every step (N4)", async () => {
+    const shifts: Array<number> = []
+    const input: DeploymentInput = {
+      ...baseInput,
+      // Four steps, but bound each run to two → one continue-as-new in the middle.
+      steps: [
+        { percent: 10, monitorMs: 0, requiresApproval: false },
+        { percent: 40, monitorMs: 0, requiresApproval: false },
+        { percent: 70, monitorMs: 0, requiresApproval: false },
+        { percent: 100, monitorMs: 0, requiresApproval: false }
+      ],
+      continueAsNewAfterSteps: 2
+    }
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowsPath,
+      activities: {
+        ...okActivities(),
+        setTrafficWeight: async (p: { weight: number }) => {
+          shifts.push(p.weight)
+        }
+      } satisfies DeploymentActivities
+    })
+    const result = (await worker.runUntil(
+      env.client.workflow.execute("deploymentWorkflow", {
+        taskQueue: TASK_QUEUE,
+        workflowId: `wf-can-${Date.now()}`,
+        args: [input]
+      })
+    )) as DeploymentResult
+
+    expect(result.kind).toBe("Succeeded")
+    // Every step ran across the continue-as-new boundary.
+    expect(shifts).toEqual([10, 40, 70, 100])
   })
 
   it("turns a non-retryable activity failure into a Failed outcome", async () => {

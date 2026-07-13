@@ -29,6 +29,10 @@ const makeDemoLayer = Effect.gen(function*() {
         Effect.andThen(
           Console.log(`  [router]  ${params.service} → ${params.version} @ ${params.weight}%`)
         )
+      ),
+    readState: () =>
+      Ref.get(weights).pipe(
+        Effect.map((w) => Object.entries(w).map(([version, weight]) => ({ version, weight })))
       )
   })
 

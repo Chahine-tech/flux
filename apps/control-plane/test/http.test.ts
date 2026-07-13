@@ -4,6 +4,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { DeploymentNotFound, FluxApi } from "@flux/contracts"
 import type { ServiceStats } from "@flux/contracts"
 import { afterAll, describe, expect, it } from "vitest"
+import * as Admission from "../src/admission.ts"
 import { DeploymentsHandlers, StatsHandlers } from "../src/http/handlers.ts"
 import { ReadModel } from "../src/read-model.ts"
 import { TemporalClient } from "../src/temporal-client.ts"
@@ -62,7 +63,7 @@ const MockReadModel = Layer.succeed(ReadModel, {
 const AppLive = HttpApiBuilder.layer(FluxApi).pipe(
   Layer.provide(DeploymentsHandlers),
   Layer.provide(StatsHandlers),
-  HttpRouter.provideRequest(Layer.merge(MockTemporal, MockReadModel)),
+  HttpRouter.provideRequest(Layer.mergeAll(MockTemporal, MockReadModel, Admission.layer(100))),
   Layer.provide(HttpServer.layerServices)
 )
 
@@ -97,6 +98,14 @@ describe("control plane HTTP API", () => {
   it("POST /deployments rejects a malformed body with 400", async () => {
     const res = await post("/deployments", { service: "", version: "v2", steps: [], rules: [], pollIntervalMs: 0 })
     expect(res.status).toBe(400)
+  })
+
+  it("POST /deployments rejects a second concurrent deployment of the same service (409)", async () => {
+    const request = { ...validTrigger, service: "billing" }
+    expect((await post("/deployments", request)).status).toBe(200)
+    const second = await post("/deployments", request)
+    expect(second.status).toBe(409)
+    expect(await second.json()).toMatchObject({ _tag: "ServiceAlreadyDeploying", service: "billing" })
   })
 
   it("GET /deployments lists deployments", async () => {

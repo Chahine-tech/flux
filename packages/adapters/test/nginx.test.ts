@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest"
 import { expect } from "vitest"
-import { redistribute, renderUpstreams, type RouterState } from "../src/router/nginx.ts"
+import { parseServiceState, redistribute, renderUpstreams, type RouterState } from "../src/router/nginx.ts"
 
 describe("redistribute (two-version canary model)", () => {
   it("gives the complement to the single other version", () => {
@@ -45,5 +45,24 @@ describe("renderUpstreams", () => {
     const config = renderUpstreams(state, { address })
     expect(config).toContain("weight=33;")
     expect(config).toContain("weight=67;")
+  })
+})
+
+describe("parseServiceState (drift detection reads the config back)", () => {
+  const address = (service: string, version: string) => `${service}-${version}:8080`
+
+  it("round-trips the rendered weights via the flux-version marker", () => {
+    const state: RouterState = { api: { "v2.0.8": 90, "v2.1.0": 10 }, web: { w1: 100 } }
+    const config = renderUpstreams(state, { address })
+    const parsed = parseServiceState(config, "api")
+    expect(parsed.sort((a, b) => a.version.localeCompare(b.version))).toEqual([
+      { version: "v2.0.8", weight: 90 },
+      { version: "v2.1.0", weight: 10 }
+    ])
+  })
+
+  it("returns an empty routing for an unknown upstream", () => {
+    const config = renderUpstreams({ api: { v2: 100 } }, { address })
+    expect(parseServiceState(config, "missing")).toEqual([])
   })
 })

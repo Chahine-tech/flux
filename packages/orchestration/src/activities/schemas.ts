@@ -38,3 +38,7 @@ export const NotifyParams = Schema.Struct({
   service: NonEmptyString,
   message: Schema.String
 })
+
+export const ReadRouterStateParams = Schema.Struct({
+  service: NonEmptyString
+})

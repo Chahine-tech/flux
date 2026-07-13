@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { FluxApi } from "@flux/contracts"
+import { AdmissionController } from "../admission.ts"
 import { ReadModel } from "../read-model.ts"
 import { TemporalClient } from "../temporal-client.ts"
 
@@ -20,8 +21,13 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
   handlers
     .handle("trigger", ({ payload }) =>
       Effect.gen(function*() {
+        const admission = yield* AdmissionController
         const temporal = yield* TemporalClient
-        const workflowId = yield* temporal.start(payload)
+        // Reserve a slot (may reject 429/409); free it again if the start fails.
+        yield* admission.admit(payload.service)
+        const workflowId = yield* temporal.start(payload).pipe(
+          Effect.onError(() => admission.release(payload.service))
+        )
         return { workflowId }
       }))
     .handle("list", ({ query }) =>

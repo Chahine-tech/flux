@@ -34,6 +34,9 @@ export interface DeploymentActivities {
     readonly message: string
   }): Promise<void>
 
+  /** Read the routing actually in effect for a service (drift detection, N4). */
+  readRouterState(params: { readonly service: string }): Promise<ReadonlyArray<{ readonly version: string; readonly weight: number }>>
+
   /** Record the terminal outcome of a deployment for self-instrumentation. */
   recordOutcome(outcome: string): Promise<void>
 }

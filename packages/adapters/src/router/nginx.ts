@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Layer, Ref, Semaphore } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { RouterPort, RouterUnavailable, type SetTrafficWeightParams } from "@flux/application"
+import { RouterPort, RouterUnavailable, type SetTrafficWeightParams, type VersionWeight } from "@flux/application"
 
 /**
  * nginx routing adapter — implements RouterPort by generating a weighted
@@ -58,13 +58,19 @@ export interface RenderOptions {
   readonly upstreamName?: (service: string) => string
 }
 
-/** Render the full set of nginx `upstream` blocks. Weight-0 versions omitted. */
+/**
+ * Render the full set of nginx `upstream` blocks. Weight-0 versions omitted.
+ * Each server line carries a `# flux-version=<version>` marker so {@link parseServiceState}
+ * can read the routing back without reversing the (arbitrary) address function.
+ */
 export const renderUpstreams = (state: RouterState, options: RenderOptions): string => {
   const blocks: string[] = []
   for (const [service, versions] of Object.entries(state)) {
     const servers = Object.entries(versions)
       .filter(([, weight]) => Math.round(weight) > 0)
-      .map(([version, weight]) => `    server ${options.address(service, version)} weight=${Math.round(weight)};`)
+      .map(([version, weight]) =>
+        `    server ${options.address(service, version)} weight=${Math.round(weight)}; # flux-version=${version}`
+      )
     if (servers.length === 0) {
       continue
     }
@@ -72,6 +78,23 @@ export const renderUpstreams = (state: RouterState, options: RenderOptions): str
     blocks.push(`upstream ${name} {\n${servers.join("\n")}\n}`)
   }
   return `${blocks.join("\n\n")}\n`
+}
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+/** Parse the weights actually written for one upstream block (reverse of {@link renderUpstreams}). */
+export const parseServiceState = (config: string, upstreamName: string): Array<VersionWeight> => {
+  const block = new RegExp(`upstream\\s+${escapeRegExp(upstreamName)}\\s*\\{([^}]*)\\}`).exec(config)
+  if (block === null) {
+    return []
+  }
+  const line = /weight=(\d+);\s*#\s*flux-version=(\S+)/g
+  const result: Array<VersionWeight> = []
+  let match: RegExpExecArray | null
+  while ((match = line.exec(block[1]!)) !== null) {
+    result.push({ version: match[2]!, weight: Number(match[1]) })
+  }
+  return result
 }
 
 export interface NginxOptions extends RenderOptions {
@@ -119,6 +142,23 @@ export const layer = (
           lock.withPermits(1)
         )
 
-      return { setTrafficWeight: apply }
+      const readState = (service: string): Effect.Effect<ReadonlyArray<VersionWeight>, RouterUnavailable> =>
+        Effect.gen(function*() {
+          const name = options.upstreamName?.(service) ?? service
+          if (!(yield* fs.exists(options.configPath))) {
+            return []
+          }
+          const content = yield* fs.readFileString(options.configPath)
+          return parseServiceState(content, name)
+        }).pipe(
+          Effect.mapError((error) =>
+            new RouterUnavailable({
+              service,
+              reason: error instanceof Error ? error.message : String(error)
+            })
+          )
+        )
+
+      return { setTrafficWeight: apply, readState }
     })
   )

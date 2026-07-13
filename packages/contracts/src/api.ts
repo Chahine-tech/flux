@@ -27,13 +27,28 @@ export class DeploymentNotActionable extends Schema.TaggedErrorClass<DeploymentN
   { httpApiStatus: 409 }
 ) {}
 
+/** The global concurrent-deployment budget is full (admission control, N4/D14). */
+export class DeploymentBudgetExhausted extends Schema.TaggedErrorClass<DeploymentBudgetExhausted>()(
+  "DeploymentBudgetExhausted",
+  { service: Schema.String, limit: Schema.Finite },
+  { httpApiStatus: 429 }
+) {}
+
+/** The service already has a deployment in flight — one at a time (admission control, N4/D14). */
+export class ServiceAlreadyDeploying extends Schema.TaggedErrorClass<ServiceAlreadyDeploying>()(
+  "ServiceAlreadyDeploying",
+  { service: Schema.String },
+  { httpApiStatus: 409 }
+) {}
+
 const WorkflowIdParam = { workflowId: Schema.String }
 
 const deployments = HttpApiGroup.make("deployments")
   .add(
     HttpApiEndpoint.post("trigger", "/deployments", {
       payload: TriggerDeploymentRequest,
-      success: TriggerDeploymentResponse
+      success: TriggerDeploymentResponse,
+      error: [DeploymentBudgetExhausted, ServiceAlreadyDeploying]
     })
   )
   .add(
