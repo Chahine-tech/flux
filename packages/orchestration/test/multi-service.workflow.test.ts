@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url"
 import { Context } from "@temporalio/activity"
 import { ApplicationFailure } from "@temporalio/common"
 import { TestWorkflowEnvironment } from "@temporalio/testing"
-import { Worker } from "@temporalio/worker"
+import { bundleWorkflowCode, Worker } from "@temporalio/worker"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { DeploymentActivities } from "../src/activities/types.ts"
 import { type DeploymentInput, type MultiServiceInput, type MultiServiceResult, SEARCH_ATTRIBUTES } from "../src/deployment-input.ts"
@@ -36,9 +36,13 @@ const okActivities = (): DeploymentActivities => ({
 })
 
 let env: TestWorkflowEnvironment
+let workflowBundle: Awaited<ReturnType<typeof bundleWorkflowCode>>
 
 beforeAll(async () => {
   env = await TestWorkflowEnvironment.createTimeSkipping()
+  // Bundle once for the whole file, reused by every worker (see
+  // deployment.workflow.test.ts for why).
+  workflowBundle = await bundleWorkflowCode({ workflowsPath })
   await env.connection.operatorService.addSearchAttributes({
     namespace: env.namespace ?? "default",
     searchAttributes: {
@@ -58,7 +62,7 @@ const run = async (input: MultiServiceInput, activities: DeploymentActivities): 
     connection: env.nativeConnection,
     namespace: env.namespace ?? "default",
     taskQueue: TASK_QUEUE,
-    workflowsPath,
+    workflowBundle,
     activities
   })
   return worker.runUntil(
@@ -115,4 +119,4 @@ describe("multiServiceDeployment", () => {
     expect(byService["web"]).toBe("Aborted")
     expect(byService["worker"]).toBe("Aborted")
   })
-})
+}, 120_000)

@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url"
 import { TestWorkflowEnvironment } from "@temporalio/testing"
-import { Worker } from "@temporalio/worker"
+import { bundleWorkflowCode, Worker } from "@temporalio/worker"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { DeploymentActivities } from "../src/activities/types.ts"
 import type { DriftCheckInput, DriftReport } from "../src/deployment-input.ts"
@@ -24,9 +24,13 @@ const baseActivities = (): DeploymentActivities => ({
 })
 
 let env: TestWorkflowEnvironment
+let workflowBundle: Awaited<ReturnType<typeof bundleWorkflowCode>>
 
 beforeAll(async () => {
   env = await TestWorkflowEnvironment.createTimeSkipping()
+  // Bundle once for the whole file, reused by every worker (see
+  // deployment.workflow.test.ts for why).
+  workflowBundle = await bundleWorkflowCode({ workflowsPath })
 }, 60_000)
 
 afterAll(async () => {
@@ -38,7 +42,7 @@ const run = async (input: DriftCheckInput, activities: DeploymentActivities): Pr
     connection: env.nativeConnection,
     namespace: env.namespace ?? "default",
     taskQueue: TASK_QUEUE,
-    workflowsPath,
+    workflowBundle,
     activities
   })
   return worker.runUntil(
@@ -94,4 +98,4 @@ describe("driftCheck", () => {
     expect(result.reconciled).toBe(false)
     expect(shifts).toHaveLength(0)
   })
-})
+}, 120_000)

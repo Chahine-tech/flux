@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url"
 import { Context } from "@temporalio/activity"
 import { ApplicationFailure } from "@temporalio/common"
 import { TestWorkflowEnvironment } from "@temporalio/testing"
-import { Worker } from "@temporalio/worker"
+import { bundleWorkflowCode, Worker } from "@temporalio/worker"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { type DeploymentInput, type DeploymentResult, type DeploymentState, SEARCH_ATTRIBUTES } from "../src/deployment-input.ts"
 import type { DeploymentActivities } from "../src/activities/types.ts"
@@ -43,9 +43,14 @@ const okActivities = (): DeploymentActivities => ({
 })
 
 let env: TestWorkflowEnvironment
+let workflowBundle: Awaited<ReturnType<typeof bundleWorkflowCode>>
 
 beforeAll(async () => {
   env = await TestWorkflowEnvironment.createTimeSkipping()
+  // Bundle the workflow code once for the whole file, then reuse it for every
+  // worker below. Passing `workflowsPath` to each `Worker.create` re-runs webpack
+  // per test (~2s each) — slow, and enough to time out on a cold CI runner.
+  workflowBundle = await bundleWorkflowCode({ workflowsPath })
   // The workflow upserts these, so they must exist on the ephemeral server too.
   await env.connection.operatorService.addSearchAttributes({
     namespace: env.namespace ?? "default",
@@ -69,7 +74,7 @@ const run = async (
     connection: env.nativeConnection,
     namespace: env.namespace ?? "default",
     taskQueue: TASK_QUEUE,
-    workflowsPath,
+    workflowBundle,
     activities
   })
   return worker.runUntil(
@@ -112,7 +117,7 @@ describe("deploymentWorkflow", () => {
       connection: env.nativeConnection,
       namespace: env.namespace ?? "default",
       taskQueue: TASK_QUEUE,
-      workflowsPath,
+      workflowBundle,
       activities: okActivities()
     })
     const result = (await worker.runUntil(async () => {
@@ -145,7 +150,7 @@ describe("deploymentWorkflow", () => {
       connection: env.nativeConnection,
       namespace: env.namespace ?? "default",
       taskQueue: TASK_QUEUE,
-      workflowsPath,
+      workflowBundle,
       activities: {
         ...okActivities(),
         setTrafficWeight: async (p: { version: string; weight: number }) => {
@@ -189,7 +194,7 @@ describe("deploymentWorkflow", () => {
       connection: env.nativeConnection,
       namespace: env.namespace ?? "default",
       taskQueue: TASK_QUEUE,
-      workflowsPath,
+      workflowBundle,
       activities: { ...okActivities(), monitorStep: cancellableMonitor }
     })
     const result = (await worker.runUntil(async () => {
@@ -228,7 +233,7 @@ describe("deploymentWorkflow", () => {
       connection: env.nativeConnection,
       namespace: env.namespace ?? "default",
       taskQueue: TASK_QUEUE,
-      workflowsPath,
+      workflowBundle,
       activities: {
         ...okActivities(),
         setTrafficWeight: async (p: { weight: number }) => {
