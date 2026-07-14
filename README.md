@@ -120,10 +120,13 @@ happened: the health endpoint got probed, the nginx config got written.
 budget of two, exactly two admitted). Drift comparison and reconciliation. The
 SQLite projection and its aggregation query. The poller's delta suppression.
 
-**Wired and type-checked, not yet run under test.** Worker deployment versioning,
-the resource tuner, and creating the drift Schedule. The time-skipping test
-server has no advanced visibility, versioning, or schedules, so those want a real
-cluster.
+**Against a real cluster, in CI.** The time-skipping server implements neither
+worker versioning, nor the tuner's native config, nor Schedules — so a second CI
+job boots the repo's own compose and proves them for real: a versioned worker
+pins the workflow it ran (the `describe` shows the deployment and build id), a
+worker running the production tuner completes a canary, and the drift Schedule's
+create → update-in-place → delete lifecycle holds. This tier exists because
+running things for real kept finding bugs the type checker was happy with.
 
 ---
 

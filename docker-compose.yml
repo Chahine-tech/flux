@@ -62,9 +62,9 @@ services:
       - "16686:16686"
       - "4318:4318"
 
-  # Minimal deploy target for the demo. whoami answers 200 on
-  # any path, so the canary's health check passes and it promotes 10 -> 50 -> 100.
-  # Opt-in:  docker compose --profile demo up -d demo-target
+  # Minimal deploy target for trying flux locally: whoami answers 200 on any
+  # path, so a canary's health check passes (point HEALTH_URL at :8088) and it
+  # promotes 10 -> 50 -> 100. Opt-in:  docker compose --profile demo up -d demo-target
   demo-target:
     image: traefik/whoami
     profiles: ["demo"]

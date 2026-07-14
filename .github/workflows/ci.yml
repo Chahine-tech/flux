@@ -21,3 +21,36 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm turbo run typecheck test
+
+  # Real-cluster proofs (D19): worker versioning, resource tuner, Schedules —
+  # the capabilities the time-skipping test server does not implement. Runs the
+  # project's own compose so CI exercises exactly what developers run.
+  real-temporal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: docker compose up -d postgresql temporal
+
+      - name: Wait for Temporal
+        run: |
+          for i in $(seq 1 60); do
+            if docker compose exec -T temporal temporal operator cluster health --address temporal:7233 >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Temporal did not become healthy in time" >&2
+          docker compose logs temporal | tail -50
+          exit 1
+
+      - run: FLUX_REAL_TEMPORAL=1 pnpm --filter @flux/worker --filter @flux/control-plane test
