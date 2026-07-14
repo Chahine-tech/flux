@@ -1,12 +1,12 @@
+> [!NOTE]
+> A learning project — I built it to go deep on Effect v4 and Temporal, not to run in production.
+
 # flux
 
 A canary deployment tool. It moves traffic to a new version a step at a time,
 watches error rate and latency, and rolls back if they get worse. The
 orchestration is a Temporal workflow, so a crash or a long monitoring window
 doesn't lose it. It drives nginx and reads Prometheus. No Kubernetes.
-
-I built it to go deep on Effect v4 and Temporal. It's a learning project, not
-something I run in production.
 
 [![Effect](https://img.shields.io/badge/Effect-4.0--beta-ff5faa.svg)](https://effect.website/)
 [![Temporal](https://img.shields.io/badge/Temporal-1.20-000000.svg)](https://temporal.io/)
