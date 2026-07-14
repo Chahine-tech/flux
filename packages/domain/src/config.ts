@@ -5,6 +5,18 @@ import { DurationFromShorthand } from "./duration.ts"
 const NonEmptyString = Schema.String.check(Schema.isMinLength(1))
 
 /**
+ * A safe service/version identifier. These values end up interpolated into
+ * nginx `upstream` blocks and PromQL label matchers, so the charset is locked
+ * down (alphanumerics plus `.`, `_`, `-`, starting and ending alphanumeric) —
+ * a name like `api {}\nserver evil` or `v1"}` must be rejected at the boundary,
+ * not escaped downstream.
+ */
+export const Identifier = Schema.String.check(
+  Schema.isPattern(/^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,62}[a-zA-Z0-9])?$/)
+)
+export type Identifier = typeof Identifier.Type
+
+/**
  * One rule in the failure budget: watch the metric produced by `query` and
  * roll back if the observed value exceeds `max`. Modelling thresholds as a list
  * of PromQL-backed rules (rather than two fixed fields) makes them arbitrary
@@ -53,11 +65,11 @@ export type Strategy = typeof Strategy.Type
 
 /** The full, normalized configuration for a single deployment run. */
 export const DeploymentConfig = Schema.Struct({
-  service: NonEmptyString,
+  service: Identifier,
   /** Version being rolled out. */
-  version: NonEmptyString,
+  version: Identifier,
   /** Version to roll back to on failure. */
-  previousVersion: NonEmptyString,
+  previousVersion: Identifier,
   strategy: Strategy,
   thresholds: Thresholds
 })

@@ -38,6 +38,13 @@ const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
   Effect.gen(function*() {
     // A malformed flux.config.toml is a fatal startup defect, not recoverable.
     const config = yield* Effect.orDie(fluxConfig)
+    // Only nginx is implemented. Refusing anything else at startup keeps the
+    // config honest — a silently ignored `router.type` would be worse than none.
+    if (config.router.type !== "nginx") {
+      return yield* Effect.die(
+        new Error(`router.type "${config.router.type}" is not implemented — only "nginx" is`)
+      )
+    }
     const reloadCommand = config.router.reloadCommand.split(/\s+/) as [string, ...ReadonlyArray<string>]
 
     return Layer.mergeAll(

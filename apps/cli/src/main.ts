@@ -6,6 +6,7 @@ import { deployMulti } from "./commands/deploy-multi.ts"
 import { drift } from "./commands/drift.ts"
 import { history } from "./commands/history.ts"
 import { abort, approve } from "./commands/signals.ts"
+import { stats } from "./commands/stats.ts"
 import { status } from "./commands/status.ts"
 
 /**
@@ -17,7 +18,7 @@ import { status } from "./commands/status.ts"
  */
 const flux = Command.make("flux").pipe(
   Command.withDescription("Progressive deployment orchestrator"),
-  Command.withSubcommands([deploy, deployMulti, drift, approve, abort, status, history])
+  Command.withSubcommands([deploy, deployMulti, drift, approve, abort, status, stats, history])
 )
 
 const run = Command.run(flux, { version: "0.0.0" })

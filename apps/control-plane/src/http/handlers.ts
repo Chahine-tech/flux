@@ -42,6 +42,11 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
         const scheduleId = yield* temporal.ensureDriftSchedule(payload.service, payload.version, payload.everyMs)
         return { scheduleId }
       }))
+    .handle("disableDrift", ({ params }) =>
+      Effect.gen(function*() {
+        const temporal = yield* TemporalClient
+        yield* temporal.disableDrift(params.service)
+      }))
     .handle("list", ({ query }) =>
       Effect.gen(function*() {
         const temporal = yield* TemporalClient

@@ -1,10 +1,11 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option, Redacted } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { DeploymentNotFound, FluxApi } from "@flux/contracts"
+import { Authorization, DeploymentNotFound, FluxApi } from "@flux/contracts"
 import type { ServiceStats } from "@flux/contracts"
 import { afterAll, describe, expect, it } from "vitest"
 import * as Admission from "../src/admission.ts"
+import * as Auth from "../src/http/auth.ts"
 import { DeploymentsHandlers, StatsHandlers } from "../src/http/handlers.ts"
 import { ReadModel } from "../src/read-model.ts"
 import { TemporalClient } from "../src/temporal-client.ts"
@@ -40,7 +41,8 @@ const MockTemporal = Layer.succeed(TemporalClient, {
   listClosed: () => Effect.succeed([]),
   approve: () => Effect.void,
   abort: () => Effect.void,
-  ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
+  ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
+  disableDrift: () => Effect.void
 })
 
 const sampleStats: ServiceStats = {
@@ -62,15 +64,23 @@ const MockReadModel = Layer.succeed(ReadModel, {
 // (mock `TemporalClient` / `ReadModel`) + the HTTP platform. The dependencies are
 // provided with `provideRequest` (the real server provides the live services the
 // same way, at the request boundary).
-const AppLive = HttpApiBuilder.layer(FluxApi).pipe(
-  Layer.provide(DeploymentsHandlers),
-  Layer.provide(StatsHandlers),
-  HttpRouter.provideRequest(Layer.mergeAll(MockTemporal, MockReadModel, Admission.layer(100))),
-  Layer.provide(HttpServer.layerServices)
-)
+const makeApp = (auth: Layer.Layer<Authorization>) =>
+  HttpApiBuilder.layer(FluxApi).pipe(
+    Layer.provide(DeploymentsHandlers),
+    Layer.provide(StatsHandlers),
+    Layer.provide(auth),
+    HttpRouter.provideRequest(Layer.mergeAll(MockTemporal, MockReadModel, Admission.layer(100))),
+    Layer.provide(HttpServer.layerServices)
+  )
 
-const { dispose, handler } = HttpRouter.toWebHandler(AppLive)
-afterAll(() => dispose())
+// Main app: auth disabled (no token configured), as in local dev.
+const { dispose, handler } = HttpRouter.toWebHandler(makeApp(Auth.layer(Option.none())))
+// Second app with a configured token, for the 401/200 auth tests.
+const authed = HttpRouter.toWebHandler(makeApp(Auth.layer(Option.some(Redacted.make("s3cret")))))
+afterAll(async () => {
+  await dispose()
+  await authed.dispose()
+})
 
 const url = (path: string) => `http://localhost${path}`
 const post = (path: string, body?: unknown) =>
@@ -151,9 +161,37 @@ describe("control plane HTTP API", () => {
     expect(await res.json()).toEqual({ scheduleId: "flux-drift-api" })
   })
 
+  it("POST /drift rejects a service name that could inject into nginx/PromQL (400)", async () => {
+    const res = await post("/drift", { service: "api {}\nserver evil:80;", version: "v2", everyMs: 60_000 })
+    expect(res.status).toBe(400)
+  })
+
+  it("DELETE /drift/:service disables drift with no content", async () => {
+    const res = await handler(new Request(url("/drift/api"), { method: "DELETE" }))
+    expect(res.status).toBe(204)
+  })
+
   it("GET /stats returns the read model's aggregations", async () => {
     const res = await handler(new Request(url("/stats")))
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ services: [sampleStats] })
+  })
+
+  it("with API_TOKEN set, rejects a missing or wrong bearer token (401)", async () => {
+    const missing = await authed.handler(new Request(url("/deployments")))
+    expect(missing.status).toBe(401)
+    expect(await missing.json()).toMatchObject({ _tag: "Unauthorized" })
+
+    const wrong = await authed.handler(
+      new Request(url("/deployments"), { headers: { authorization: "Bearer nope" } })
+    )
+    expect(wrong.status).toBe(401)
+  })
+
+  it("with API_TOKEN set, accepts the right bearer token", async () => {
+    const res = await authed.handler(
+      new Request(url("/deployments"), { headers: { authorization: "Bearer s3cret" } })
+    )
+    expect(res.status).toBe(200)
   })
 })

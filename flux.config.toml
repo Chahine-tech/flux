@@ -20,7 +20,7 @@ max_error_rate = 0.01       # 1%
 max_p99_latency_ms = 500
 
 [router]
-type = "nginx"              # nginx | caddy | traefik | custom
+type = "nginx"              # only "nginx" is implemented (the RouterPort makes more possible)
 config_path = "/etc/nginx/conf.d/flux-upstream.conf"
 reload_command = "nginx -s reload"
 

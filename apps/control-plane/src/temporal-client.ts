@@ -9,7 +9,7 @@ import {
   WorkflowNotFoundError,
   WorkflowUpdateFailedError
 } from "@temporalio/client"
-import { ensureDriftSchedule as ensureDriftScheduleImpl } from "./schedules.ts"
+import { deleteDriftSchedule, ensureDriftSchedule as ensureDriftScheduleImpl } from "./schedules.ts"
 
 /**
  * Port to Temporal for the control plane — the single place the HTTP handlers
@@ -40,6 +40,8 @@ export class TemporalClient extends Context.Service<TemporalClient, {
     version: string,
     everyMs: number
   ) => Effect.Effect<string>
+  /** Delete the service's drift-check Schedule (idempotent). */
+  readonly disableDrift: (service: string) => Effect.Effect<void>
 }>()("TemporalClient") {}
 
 const TASK_QUEUE = "flux-deployments"
@@ -161,7 +163,9 @@ export const make = (client: Client): typeof TemporalClient.Service => {
       ensureDriftScheduleImpl(client, {
         desired: { service, desired: [{ version, weight: 100 }], reconcile: true },
         everyMs
-      })
+      }),
+
+    disableDrift: (service) => deleteDriftSchedule(client, service)
   }
 }
 

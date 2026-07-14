@@ -43,3 +43,17 @@ export const ensureDriftSchedule = (client: Client, options: DriftScheduleOption
     }
     return scheduleId
   })
+
+/**
+ * Delete the drift-check schedule for a service. Idempotent: deleting a
+ * schedule that does not exist is a no-op, so drift can be switched off safely
+ * at any time.
+ */
+export const deleteDriftSchedule = (client: Client, service: string): Effect.Effect<void> =>
+  Effect.promise(async () => {
+    try {
+      await client.schedule.getHandle(driftScheduleId(service)).delete()
+    } catch {
+      // Not found → already off.
+    }
+  })

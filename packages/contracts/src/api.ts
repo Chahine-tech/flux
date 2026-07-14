@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
 import { DeploymentState, DeploymentSummary } from "./deployment.ts"
 import { EnableDriftRequest, EnableDriftResponse } from "./drift.ts"
 import { StatsResponse } from "./stats.ts"
@@ -13,6 +13,23 @@ import { TriggerDeploymentRequest, TriggerDeploymentResponse, TriggerMultiReques
  * its payload and its result can never drift between server and client. OpenAPI
  * and a Scalar docs page are generated from it for free.
  */
+
+/** Bearer token missing or wrong. */
+export class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
+  "Unauthorized",
+  {},
+  { httpApiStatus: 401 }
+) {}
+
+/**
+ * Bearer-token auth on every endpoint, declared in the contract so the OpenAPI
+ * docs advertise it and the 401 is typed. The control plane provides the
+ * implementation; when it is configured without a token, auth is disabled (dev).
+ */
+export class Authorization extends HttpApiMiddleware.Service<Authorization>()("flux/Authorization", {
+  security: { bearer: HttpApiSecurity.bearer },
+  error: Unauthorized
+}) {}
 
 /** No deployment with this id is known to Temporal. */
 export class DeploymentNotFound extends Schema.TaggedErrorClass<DeploymentNotFound>()(
@@ -65,6 +82,12 @@ const deployments = HttpApiGroup.make("deployments")
     })
   )
   .add(
+    // Idempotent — disabling drift for a service that has none is a 204 too.
+    HttpApiEndpoint.delete("disableDrift", "/drift/:service", {
+      params: { service: Schema.String }
+    })
+  )
+  .add(
     HttpApiEndpoint.get("list", "/deployments", {
       query: {
         service: Schema.optional(Schema.String),
@@ -99,4 +122,4 @@ const stats = HttpApiGroup.make("stats").add(
   })
 )
 
-export const FluxApi = HttpApi.make("flux").add(deployments).add(stats)
+export const FluxApi = HttpApi.make("flux").add(deployments).add(stats).middleware(Authorization)

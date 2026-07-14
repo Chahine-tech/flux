@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Thresholds } from "@flux/domain"
+import { Identifier, Thresholds } from "@flux/domain"
 
 /**
  * The body of `POST /deployments` — the request that starts a canary.
@@ -23,9 +23,11 @@ export const DeploymentStep = Schema.Struct({
 export type DeploymentStep = typeof DeploymentStep.Type
 
 export const TriggerDeploymentRequest = Schema.Struct({
-  service: NonEmptyString,
-  version: NonEmptyString,
-  previousVersion: NonEmptyString,
+  // `Identifier`, not just non-empty: these are interpolated into nginx config
+  // and PromQL by the adapters, so the charset is locked down at the boundary.
+  service: Identifier,
+  version: Identifier,
+  previousVersion: Identifier,
   steps: Schema.NonEmptyArray(DeploymentStep),
   rules: Thresholds,
   pollIntervalMs: Schema.Finite.check(Schema.isGreaterThan(0))

@@ -57,6 +57,22 @@ describe("DeploymentConfig", () => {
     expect(() => decode(bad)).toThrow()
   })
 
+  it("rejects service/version values that could inject into nginx or PromQL", () => {
+    // service and version are interpolated into nginx upstream blocks and
+    // PromQL label matchers — the charset must be locked at the boundary.
+    const nginxInjection = structuredClone(valid)
+    nginxInjection.service = "api {}\nserver evil:80;"
+    expect(() => decode(nginxInjection)).toThrow()
+
+    const promqlInjection = structuredClone(valid)
+    promqlInjection.version = "v1\"}"
+    expect(() => decode(promqlInjection)).toThrow()
+
+    const leadingDash = structuredClone(valid)
+    leadingDash.service = "-api"
+    expect(() => decode(leadingDash)).toThrow()
+  })
+
   it("rejects a strategy with no steps", () => {
     const bad = structuredClone(valid)
     bad.strategy.steps = []

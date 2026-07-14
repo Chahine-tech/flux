@@ -81,7 +81,7 @@ A pnpm + Turborepo monorepo.
 | `@flux/config` | TOML + env configuration |
 | `apps/worker` | Runs the Temporal worker |
 | `apps/control-plane` | HTTP API, websocket watch, SQLite read model |
-| `apps/cli` | `flux` — deploy, deploy-multi, drift, status, approve, abort, history |
+| `apps/cli` | `flux` — deploy, deploy-multi, drift, status, stats, approve, abort, history |
 
 ## Running it
 

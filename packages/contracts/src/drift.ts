@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Identifier } from "@flux/domain"
 
 /**
  * Enable drift detection for a service (N4/D17): create or update a Temporal
@@ -9,9 +10,9 @@ import { Schema } from "effect"
 const NonEmptyString = Schema.String.check(Schema.isMinLength(1))
 
 export const EnableDriftRequest = Schema.Struct({
-  service: NonEmptyString,
+  service: Identifier,
   /** The version that should be receiving 100% of traffic. */
-  version: NonEmptyString,
+  version: Identifier,
   /** How often the check runs, in milliseconds. */
   everyMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(1000))
 })

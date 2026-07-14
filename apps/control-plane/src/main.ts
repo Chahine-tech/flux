@@ -3,6 +3,7 @@ import { SqliteClient } from "@effect/sql-sqlite-node"
 import { NodeRuntime } from "@effect/platform-node"
 import * as Admission from "./admission.ts"
 import * as DeploymentEvents from "./deployment-events.ts"
+import * as Auth from "./http/auth.ts"
 import { serverLayer } from "./http/server.ts"
 import * as ReadModel from "./read-model.ts"
 import * as TemporalClient from "./temporal-client.ts"
@@ -22,7 +23,9 @@ const config = Config.all({
   maxTracked: Config.number("MAX_TRACKED_DEPLOYMENTS").pipe(Config.withDefault(200)),
   readModelDb: Config.string("READ_MODEL_DB").pipe(Config.withDefault("flux-read-model.db")),
   projectionIntervalMs: Config.number("PROJECTION_INTERVAL_MS").pipe(Config.withDefault(5000)),
-  maxConcurrent: Config.number("MAX_CONCURRENT_DEPLOYMENTS").pipe(Config.withDefault(10))
+  maxConcurrent: Config.number("MAX_CONCURRENT_DEPLOYMENTS").pipe(Config.withDefault(10)),
+  // Bearer token for the HTTP API; unset → auth disabled (local dev).
+  apiToken: Config.redacted("API_TOKEN").pipe(Config.option)
 })
 
 const MainLive = Layer.unwrap(
@@ -39,6 +42,7 @@ const MainLive = Layer.unwrap(
       })
     )
     return serverLayer({ port: cfg.port }).pipe(
+      Layer.provide(Auth.layer(cfg.apiToken)),
       Layer.provide(DeploymentEventsLive),
       Layer.provide(ReadModel.layer({ projectionInterval: cfg.projectionIntervalMs, maxProjected: cfg.maxTracked })),
       Layer.provide(SqliteClient.layer({ filename: cfg.readModelDb })),

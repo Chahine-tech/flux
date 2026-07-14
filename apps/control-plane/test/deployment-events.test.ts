@@ -35,7 +35,8 @@ const makeSetup = () => {
     listClosed: () => Effect.succeed([]),
     approve: () => Effect.void,
     abort: () => Effect.void,
-    ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
+    ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
+    disableDrift: () => Effect.void
   })
   const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
   return { EventsLive, setState: (next: DeploymentState) => (current = next) }
@@ -76,7 +77,8 @@ describe("deployment events poller", () => {
       listClosed: () => Effect.succeed([]),
       approve: () => Effect.void,
       abort: () => Effect.void,
-      ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
+      ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
+      disableDrift: () => Effect.void
     })
     const EventsLive = layer({
       pollInterval: "5 seconds",
@@ -105,7 +107,8 @@ describe("deployment events poller", () => {
       listClosed: () => Effect.succeed([]),
       approve: () => Effect.void,
       abort: () => Effect.void,
-      ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
+      ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
+      disableDrift: () => Effect.void
     })
     const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
 

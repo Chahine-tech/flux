@@ -34,7 +34,8 @@ const FakeTemporal = Layer.succeed(TemporalClient, {
   listClosed: () => Effect.succeed(closed),
   approve: () => Effect.void,
   abort: () => Effect.void,
-  ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
+  ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
+      disableDrift: () => Effect.void
 })
 
 const makeLayer = () => {
