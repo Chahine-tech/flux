@@ -24,10 +24,14 @@ const metrics = Config.all({
 
 const router = Config.all({
   type: Config.string("type").pipe(Config.withDefault("nginx")),
+  // nginx: where the generated upstream config goes, and how to reload.
   configPath: Config.string("config_path").pipe(
     Config.withDefault("/etc/nginx/conf.d/flux-upstream.conf")
   ),
-  reloadCommand: Config.string("reload_command").pipe(Config.withDefault("nginx -s reload"))
+  reloadCommand: Config.string("reload_command").pipe(Config.withDefault("nginx -s reload")),
+  // caddy: the admin API and the `apps.http.servers.<name>` flux manages.
+  adminUrl: Config.string("admin_url").pipe(Config.withDefault("http://localhost:2019")),
+  serverName: Config.string("server_name").pipe(Config.withDefault("flux"))
 }).pipe(Config.nested("router"))
 
 const thresholds = Config.all({

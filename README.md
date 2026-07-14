@@ -6,7 +6,7 @@
 A canary deployment tool. It moves traffic to a new version a step at a time,
 watches error rate and latency, and rolls back if they get worse. The
 orchestration is a Temporal workflow, so a crash or a long monitoring window
-doesn't lose it. It drives nginx and reads Prometheus. No Kubernetes.
+doesn't lose it. It drives nginx or Caddy and reads Prometheus. No Kubernetes.
 
 [![Effect](https://img.shields.io/badge/Effect-4.0--beta-ff5faa.svg)](https://effect.website/)
 [![Temporal](https://img.shields.io/badge/Temporal-1.20-000000.svg)](https://temporal.io/)
@@ -66,6 +66,10 @@ Choices that go past plumbing:
   fail-fast policy that aborts the siblings if one goes bad.
 - An abort cancels the in-flight monitor immediately (a `CancellationScope`)
   instead of waiting out the window.
+- The router port has two deliberately opposite implementations — nginx renders
+  a file and reloads a process behind a lock; Caddy PATCHes its admin API,
+  stateless and lock-free — and the same canary passes through both without a
+  line changing above the port.
 
 ## Layout
 
@@ -75,7 +79,7 @@ A pnpm + Turborepo monorepo.
 |---|---|
 | `@flux/domain` | Schemas, tagged errors, pure rules |
 | `@flux/application` | Use cases and the four ports: metrics, router, health, notify |
-| `@flux/adapters` | Port implementations: Prometheus, nginx, HTTP health, Slack |
+| `@flux/adapters` | Port implementations: Prometheus, nginx, Caddy, HTTP health, Slack |
 | `@flux/orchestration` | Temporal workflows and activities |
 | `@flux/contracts` | Shared HTTP + RPC schemas, so the CLI and control plane agree |
 | `@flux/config` | TOML + env configuration |

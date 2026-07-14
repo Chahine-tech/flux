@@ -1,6 +1,7 @@
 import { Effect, FileSystem, Layer, Ref, Semaphore } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { RouterPort, RouterUnavailable, type SetTrafficWeightParams, type VersionWeight } from "@flux/application"
+import { baseline, redistribute } from "./weights.ts"
 
 /**
  * nginx routing adapter — implements RouterPort by generating a weighted
@@ -25,31 +26,9 @@ import { RouterPort, RouterUnavailable, type SetTrafficWeightParams, type Versio
 /** service → (version → weight). */
 export type RouterState = Readonly<Record<string, Readonly<Record<string, number>>>>
 
-/**
- * Two-version canary model (validated default): set `version` to `weight` and
- * distribute the remaining `100 - weight` across the other known versions,
- * proportionally to their current weights (evenly if they are all zero).
- * For the common previous+new pair this yields exact percentages.
- */
-export const redistribute = (
-  versions: Readonly<Record<string, number>>,
-  version: string,
-  weight: number
-): Record<string, number> => {
-  const result: Record<string, number> = { [version]: weight }
-  const others = Object.keys(versions).filter((v) => v !== version)
-  if (others.length === 0) {
-    return result
-  }
-  const remainder = Math.max(0, 100 - weight)
-  const currentSum = others.reduce((sum, v) => sum + (versions[v] ?? 0), 0)
-  for (const v of others) {
-    result[v] = currentSum === 0
-      ? remainder / others.length
-      : remainder * ((versions[v] ?? 0) / currentSum)
-  }
-  return result
-}
+// The two-version canary weight model lives in weights.ts (shared by every
+// router adapter); re-exported for existing importers.
+export { redistribute }
 
 export interface RenderOptions {
   /** Resolve the backend address (`host:port`) for a service/version. */
@@ -121,7 +100,15 @@ export const layer = (
         Effect.gen(function*() {
           const next = yield* Ref.updateAndGet(state, (current) => ({
             ...current,
-            [params.service]: redistribute(current[params.service] ?? {}, params.version, params.weight)
+            // `baseline` seeds the previous version at 100% when the registry has
+            // no state for the service (first deployment, or a worker restarted
+            // mid-canary) — without it the first shift would render a single
+            // upstream and send all traffic to the canary.
+            [params.service]: redistribute(
+              baseline(current[params.service] ?? {}, params),
+              params.version,
+              params.weight
+            )
           }))
           yield* fs.writeFileString(options.configPath, renderUpstreams(next, options))
           const exitCode = yield* spawner.exitCode(ChildProcess.make(reloadCmd, reloadArgs))

@@ -188,7 +188,10 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       await acts.setTrafficWeight({
         service: input.service,
         version: input.version,
-        weight: step.percent
+        weight: step.percent,
+        // Lets a router with no state for the service (first deployment, or an
+        // adapter restarted mid-canary) seed the complement correctly.
+        previousVersion: input.previousVersion
       })
       // Register the compensation the first time traffic diverts to the new version.
       if (compensations.length === 0) {

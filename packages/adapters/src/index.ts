@@ -9,4 +9,5 @@
 export * as HttpHealth from "./health/http.ts"
 export * as PrometheusMetrics from "./metrics/prometheus.ts"
 export * as SlackNotify from "./notify/slack.ts"
+export * as CaddyRouter from "./router/caddy.ts"
 export * as NginxRouter from "./router/nginx.ts"

@@ -1,8 +1,8 @@
 import { Effect, Layer, ManagedRuntime, Option, Redacted } from "effect"
 import { Otlp } from "effect/unstable/observability"
 import { NodeChildProcessSpawner, NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node"
-import { HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/adapters"
-import { fluxConfig, layerFromToml } from "@flux/config"
+import { CaddyRouter, HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/adapters"
+import { fluxConfig, type FluxConfig, layerFromToml } from "@flux/config"
 import type { AppServices } from "@flux/orchestration"
 
 /**
@@ -34,18 +34,40 @@ const TracingLayer = Otlp.layerJson({
   resource: { serviceName: "flux-worker" }
 }).pipe(Layer.provide(NodeHttpClient.layerUndici))
 
+// Both routers resolve backends the same way: one `service-version` host per
+// deployed version (the compose topology). `versionOf` is the inverse — how the
+// Caddy adapter names the versions it reads back from the live config.
+const backendAddress = (service: string, version: string): string => `${service}-${version}:8080`
+const versionOfDial = (service: string, dial: string): string | undefined =>
+  dial.startsWith(`${service}-`) ? dial.slice(service.length + 1).replace(/:\d+$/, "") : undefined
+
+/** Select the RouterPort adapter the config asks for (D20). */
+const routerLayer = (config: FluxConfig) => {
+  switch (config.router.type) {
+    case "nginx":
+      return NginxRouter.layer({
+        configPath: config.router.configPath,
+        reloadCommand: config.router.reloadCommand.split(/\s+/) as [string, ...ReadonlyArray<string>],
+        address: backendAddress
+      })
+    case "caddy":
+      return CaddyRouter.layer({
+        adminUrl: config.router.adminUrl,
+        server: config.router.serverName,
+        address: backendAddress,
+        versionOf: versionOfDial
+      })
+    default:
+      // Refusing unknown types at startup keeps the config honest — a silently
+      // ignored `router.type` would be worse than none.
+      throw new Error(`router.type "${config.router.type}" is not implemented — use "nginx" or "caddy"`)
+  }
+}
+
 const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
   Effect.gen(function*() {
     // A malformed flux.config.toml is a fatal startup defect, not recoverable.
     const config = yield* Effect.orDie(fluxConfig)
-    // Only nginx is implemented. Refusing anything else at startup keeps the
-    // config honest — a silently ignored `router.type` would be worse than none.
-    if (config.router.type !== "nginx") {
-      return yield* Effect.die(
-        new Error(`router.type "${config.router.type}" is not implemented — only "nginx" is`)
-      )
-    }
-    const reloadCommand = config.router.reloadCommand.split(/\s+/) as [string, ...ReadonlyArray<string>]
 
     return Layer.mergeAll(
       PrometheusMetrics.layer({ url: config.metrics.prometheusUrl }),
@@ -61,11 +83,7 @@ const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
       SlackNotify.layer({
         webhookUrl: Option.getOrElse(config.notifications.slackWebhook, () => Redacted.make(""))
       }),
-      NginxRouter.layer({
-        configPath: config.router.configPath,
-        reloadCommand,
-        address: (service, version) => `${service}-${version}:8080`
-      })
+      routerLayer(config)
     ).pipe(Layer.provide(PlatformLayer))
   })
 ).pipe(

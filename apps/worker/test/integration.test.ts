@@ -1,11 +1,11 @@
 import { Layer, ManagedRuntime, Redacted } from "effect"
 import { NodeChildProcessSpawner, NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node"
-import { HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/adapters"
+import { CaddyRouter, HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/adapters"
 import { type AppServices, createActivities, type DeploymentInput, type DeploymentResult, SEARCH_ATTRIBUTES } from "@flux/orchestration"
 import { TestWorkflowEnvironment } from "@temporalio/testing"
 import { Worker } from "@temporalio/worker"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { createServer, type Server } from "node:http"
+import { createServer, type IncomingMessage, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -34,6 +34,10 @@ const SpawnerLayer = NodeChildProcessSpawner.layer.pipe(
 )
 const PlatformLayer = Layer.mergeAll(NodeHttpClient.layerUndici, NodeFileSystem.layer, SpawnerLayer)
 
+const backendAddress = (service: string, version: string) => `${service}-${version}:8080`
+const versionOfDial = (service: string, dial: string) =>
+  dial.startsWith(`${service}-`) ? dial.slice(service.length + 1).replace(/:\d+$/, "") : undefined
+
 // The real adapters, pointed at a local HTTP double and a no-op reload command.
 const appLayer = (baseUrl: string, configPath: string): Layer.Layer<AppServices> =>
   Layer.mergeAll(
@@ -43,7 +47,21 @@ const appLayer = (baseUrl: string, configPath: string): Layer.Layer<AppServices>
     NginxRouter.layer({
       configPath,
       reloadCommand: ["true"],
-      address: (service, version) => `${service}-${version}:8080`
+      address: backendAddress
+    })
+  ).pipe(Layer.provide(PlatformLayer))
+
+// The same stack with the Caddy adapter driving the admin-API double (D20).
+const caddyAppLayer = (baseUrl: string): Layer.Layer<AppServices> =>
+  Layer.mergeAll(
+    PrometheusMetrics.layer({ url: baseUrl }),
+    HttpHealth.layer({ url: () => `${baseUrl}/health` }),
+    SlackNotify.layer({ webhookUrl: Redacted.make(`${baseUrl}/notify`) }),
+    CaddyRouter.layer({
+      adminUrl: baseUrl,
+      server: "flux",
+      address: backendAddress,
+      versionOf: versionOfDial
     })
   ).pipe(Layer.provide(PlatformLayer))
 
@@ -65,8 +83,27 @@ let baseUrl: string
 let healthHits = 0
 let metricsHits = 0
 
+// A stand-in for Caddy's admin API: an in-memory route store keyed by @id,
+// recording every handler write so the test can assert the weight sequence.
+const caddyRoutes = new Map<string, { "@id": string; handle: Array<unknown> }>()
+const caddyWrites: Array<unknown> = []
+
+const readBody = (req: IncomingMessage): Promise<unknown> =>
+  new Promise((resolve, reject) => {
+    const chunks: Array<Buffer> = []
+    req.on("data", (chunk) => chunks.push(chunk))
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")))
+      } catch (error) {
+        reject(error)
+      }
+    })
+  })
+
 beforeAll(async () => {
   server = createServer((req, res) => {
+    const idMatch = /^\/id\/([^/]+)(\/handle\/0)?$/.exec(req.url ?? "")
     if (req.url?.startsWith("/health")) {
       healthHits++
       res.writeHead(200).end("ok")
@@ -76,6 +113,25 @@ beforeAll(async () => {
       res.writeHead(200, { "content-type": "application/json" }).end(
         JSON.stringify({ status: "success", data: { result: [] } })
       )
+    } else if (req.method === "GET" && idMatch) {
+      const route = caddyRoutes.get(idMatch[1]!)
+      if (route === undefined) res.writeHead(404).end()
+      else res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(route))
+    } else if (req.method === "PATCH" && idMatch?.[2] !== undefined) {
+      void readBody(req).then((handler) => {
+        const route = caddyRoutes.get(idMatch[1]!)
+        if (route === undefined) return res.writeHead(404).end()
+        route.handle[0] = handler
+        caddyWrites.push(handler)
+        res.writeHead(200).end()
+      })
+    } else if (req.method === "POST" && req.url === "/config/apps/http/servers/flux/routes") {
+      void readBody(req).then((body) => {
+        const route = body as { "@id": string; handle: Array<unknown> }
+        caddyRoutes.set(route["@id"], route)
+        caddyWrites.push(route.handle[0])
+        res.writeHead(200).end()
+      })
     } else {
       res.writeHead(200).end("ok") // notify webhook
     }
@@ -133,6 +189,43 @@ describe("worker integration", () => {
     } finally {
       await runtime.dispose()
       rmSync(configPath, { force: true })
+    }
+  }, 90_000)
+
+  it("runs the same canary through the Caddy adapter, proving the port (D20)", async () => {
+    const runtime = ManagedRuntime.make(caddyAppLayer(baseUrl))
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowsPath,
+      activities: createActivities(runtime)
+    })
+
+    try {
+      const result = await worker.runUntil(
+        env.client.workflow.execute("deploymentWorkflow", {
+          taskQueue: TASK_QUEUE,
+          workflowId: `int-caddy-${Date.now()}`,
+          args: [{ ...input, service: "cart" }]
+        })
+      ) as DeploymentResult
+
+      expect(result.kind).toBe("Succeeded")
+      // First shift (10%): the adapter had no state for the service, so the
+      // previous version was seeded — 90/10, not a single canary upstream.
+      const first = caddyWrites[0] as {
+        upstreams: Array<{ dial: string }>
+        load_balancing: { selection_policy: { weights: Array<number> } }
+      }
+      expect(first.upstreams.map((u) => u.dial)).toEqual(["cart-v1:8080", "cart-v2:8080"])
+      expect(first.load_balancing.selection_policy.weights).toEqual([90, 10])
+      // Full rollout: the managed route ends at 100% on the new version.
+      const last = caddyWrites.at(-1) as typeof first
+      expect(last.upstreams.map((u) => u.dial)).toEqual(["cart-v2:8080"])
+      expect(last.load_balancing.selection_policy.weights).toEqual([100])
+    } finally {
+      await runtime.dispose()
     }
   }, 90_000)
 })

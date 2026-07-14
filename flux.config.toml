@@ -20,7 +20,10 @@ max_error_rate = 0.01       # 1%
 max_p99_latency_ms = 500
 
 [router]
-type = "nginx"              # only "nginx" is implemented (the RouterPort makes more possible)
+type = "nginx"              # nginx | caddy
+# nginx: config_path + reload_command (below). caddy: admin_url + server_name.
+# admin_url = "http://localhost:2019"
+# server_name = "flux"
 config_path = "/etc/nginx/conf.d/flux-upstream.conf"
 reload_command = "nginx -s reload"
 

@@ -6,6 +6,12 @@ export interface SetTrafficWeightParams {
   readonly service: string
   readonly version: string
   readonly weight: number
+  /**
+   * The version currently serving traffic, when the caller knows it. Lets an
+   * adapter with no state for the service (first deployment, restart) seed the
+   * complement at `previousVersion` instead of routing everything to `version`.
+   */
+  readonly previousVersion?: string | undefined
 }
 
 /** A version and the traffic weight it currently receives. */

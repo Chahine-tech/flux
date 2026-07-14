@@ -20,7 +20,8 @@ export const HealthCheckParams = Schema.Struct({
 export const SetTrafficWeightParams = Schema.Struct({
   service: Identifier,
   version: Identifier,
-  weight: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 100 }))
+  weight: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+  previousVersion: Schema.optionalKey(Identifier)
 })
 
 export const MonitorStepParams = Schema.Struct({

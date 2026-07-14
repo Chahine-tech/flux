@@ -18,6 +18,8 @@ export interface DeploymentActivities {
     readonly service: string
     readonly version: string
     readonly weight: number
+    /** Seeds an adapter that has no state for the service yet (see RouterPort). */
+    readonly previousVersion?: string
   }): Promise<void>
 
   monitorStep(params: {
