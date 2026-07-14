@@ -92,4 +92,38 @@ describe("deployment events poller", () => {
       expect(ended).toEqual(["api"])
     }).pipe(Effect.provide(EventsLive))
   })
+
+  it.effect("closes the watch stream once the deployment reaches a terminal outcome", () => {
+    let running = ["wf1"]
+    let current: DeploymentState = state(50)
+    const FakeTemporal = Layer.succeed(TemporalClient, {
+      start: () => Effect.succeed("wf1"),
+      startMulti: () => Effect.succeed("multi"),
+      status: () => Effect.sync(() => current),
+      list: () => Effect.succeed([]),
+      listRunningIds: () => Effect.sync(() => running),
+      listClosed: () => Effect.succeed([]),
+      approve: () => Effect.void,
+      abort: () => Effect.void,
+      ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
+    })
+    const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
+
+    return Effect.gen(function*() {
+      const events = yield* DeploymentEvents
+      // `runCollect` is unbounded — it only completes if the stream terminates,
+      // which is the property under test.
+      const collector = yield* events.watch("wf1").pipe(Stream.runCollect, Effect.forkChild)
+
+      yield* TestClock.adjust("1 second") // watcher emits its current state (50%, running)
+      // The deployment finishes: it leaves the running set and its final state
+      // carries an outcome.
+      current = { ...state(100, "done"), outcome: "Succeeded" }
+      running = []
+      yield* TestClock.adjust("5 seconds") // tick publishes the terminal state → stream closes
+
+      const collected = yield* Fiber.join(collector)
+      expect(collected.at(-1)?.outcome).toBe("Succeeded")
+    }).pipe(Effect.provide(EventsLive))
+  })
 })

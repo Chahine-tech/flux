@@ -6,3 +6,8 @@ coverage/
 .env
 .env.local
 .DS_Store
+
+# local dev SQLite read model (created by the control plane at runtime)
+*.db
+*.db-shm
+*.db-wal

@@ -11,6 +11,8 @@ something I run in production.
 [![Effect](https://img.shields.io/badge/Effect-4.0--beta-ff5faa.svg)](https://effect.website/)
 [![Temporal](https://img.shields.io/badge/Temporal-1.20-000000.svg)](https://temporal.io/)
 
+![A canary promoting itself 10% → 50% → 100%](docs/demo.gif)
+
 ## How a deployment runs
 
 You give it a service, the new version, and the one to fall back to. The workflow

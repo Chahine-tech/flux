@@ -65,8 +65,8 @@ const tuner: WorkerTuner = {
     targetMemoryUsage: Number(process.env.WORKER_TARGET_MEMORY ?? 0.8),
     targetCpuUsage: Number(process.env.WORKER_TARGET_CPU ?? 0.9)
   },
-  activityTaskSlotOptions: { minimumSlots: 1, maximumSlots: 200, rampThrottle: "50 millis" },
-  localActivityTaskSlotOptions: { minimumSlots: 2, maximumSlots: 500, rampThrottle: "0 millis" }
+  activityTaskSlotOptions: { minimumSlots: 1, maximumSlots: 200, rampThrottle: "50ms" },
+  localActivityTaskSlotOptions: { minimumSlots: 2, maximumSlots: 500, rampThrottle: "0ms" }
 }
 
 const main = async (): Promise<void> => {

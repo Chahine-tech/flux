@@ -12,7 +12,6 @@ import {
   proxyActivities,
   proxyLocalActivities,
   setHandler,
-  setWorkflowOptions,
   upsertSearchAttributes,
   workflowInfo
 } from "@temporalio/workflow"
@@ -278,6 +277,8 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
   }
 }
 
-// Pin an in-flight deployment to the worker version that started it (N4/D15), so
-// a rolling worker upgrade never changes the code running a canary mid-flight.
-setWorkflowOptions({ versioningBehavior: "PINNED" }, deploymentWorkflow)
+// Versioning behavior (PINNED — an in-flight deployment finishes on the worker
+// version that started it, N4/D15) is set by the worker's `defaultVersioningBehavior`
+// when it runs in versioned mode (FLUX_WORKER_BUILD_ID). It can't be declared
+// statically here: Temporal rejects a versioning behavior when the worker isn't
+// versioned, which is the default in dev and tests.

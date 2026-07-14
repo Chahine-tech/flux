@@ -34,6 +34,12 @@ export const layer = (
       const client = yield* HttpClient.HttpClient
       const url = Redacted.value(options.webhookUrl)
 
+      // No webhook configured → notifications are disabled. Sending is a no-op,
+      // so a deployment never fails just because Slack isn't wired up.
+      if (url === "") {
+        return { send: () => Effect.void }
+      }
+
       return {
         send: (notification: Notification): Effect.Effect<void, NotifyFailed> =>
           client

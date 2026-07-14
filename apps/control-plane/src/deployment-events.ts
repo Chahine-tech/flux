@@ -75,10 +75,18 @@ export const layer = (
         }
 
         // Deployments we were tracking that are no longer running have ended.
+        // A finished workflow leaves the running set before the poller sees its
+        // terminal state, so query it once more and publish the final state (it
+        // carries the `outcome`) — that's what lets `watch` close on its own —
+        // then release its admission slot.
         for (const workflowId of HashMap.keys(previous)) {
           if (runningSet.has(workflowId)) continue
           const last = HashMap.get(previous, workflowId)
           if (Option.isSome(last)) {
+            const final = yield* Effect.option(temporal.status(workflowId))
+            if (Option.isSome(final) && final.value.outcome !== undefined) {
+              yield* PubSub.publish(pubsub, { workflowId, state: final.value })
+            }
             yield* onEnded(last.value.service)
           }
         }
@@ -108,10 +116,15 @@ export const layer = (
               Stream.map((event) => event.state)
             )
 
-            return Option.match(current, {
+            const stream = Option.match(current, {
               onNone: () => deltas,
               onSome: (state) => Stream.concat(Stream.make(state), deltas)
             })
+
+            // Emit the terminal state (the one carrying an `outcome`) and then
+            // complete, so `flux status --watch` exits instead of hanging on a
+            // finished deployment.
+            return Stream.takeUntil(stream, (state) => state.outcome !== undefined)
           })
         )
 

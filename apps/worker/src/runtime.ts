@@ -43,7 +43,13 @@ const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
     return Layer.mergeAll(
       PrometheusMetrics.layer({ url: config.metrics.prometheusUrl }),
       HttpHealth.layer({
-        url: ({ service, version }) => `http://${service}-${version}:8080/health`
+        // Default targets a `service-version` host — the compose / N0-e2e
+        // topology where each version is its own container. HEALTH_URL overrides
+        // it with a fixed URL, used by the local demo where the worker runs on
+        // the host and probes a single stand-in target.
+        url: process.env.HEALTH_URL
+          ? () => process.env.HEALTH_URL as string
+          : ({ service, version }) => `http://${service}-${version}:8080/health`
       }),
       SlackNotify.layer({
         webhookUrl: Option.getOrElse(config.notifications.slackWebhook, () => Redacted.make(""))
