@@ -3,7 +3,7 @@ import { Client, Connection } from "@temporalio/client"
 import { NativeConnection, Worker } from "@temporalio/worker"
 import { fileURLToPath } from "node:url"
 import { HealthPort, MetricsPort, NotifyPort, RouterPort } from "@flux/application"
-import { createActivities, type DeploymentInput, type DeploymentResult } from "@flux/orchestration"
+import { createActivities, type DeploymentInput, type DeploymentResult, makePayloadCodec } from "@flux/orchestration"
 
 /**
  * Self-contained e2e demo — runs the real canary workflow against a real
@@ -85,13 +85,18 @@ const main = async (): Promise<void> => {
     namespace,
     taskQueue,
     workflowsPath: fileURLToPath(import.meta.resolve("@flux/orchestration/workflows")),
-    activities: createActivities(runtime)
+    activities: createActivities(runtime),
+    dataConverter: { payloadCodecs: [makePayloadCodec()] }
   })
 
   try {
     await worker.runUntil(async () => {
       const connection = await Connection.connect({ address })
-      const client = new Client({ connection, namespace })
+      const client = new Client({
+        connection,
+        namespace,
+        dataConverter: { payloadCodecs: [makePayloadCodec()] }
+      })
       const workflowId = `demo-${Date.now()}`
 
       console.log(`\n[flux] deploy api v2.1.0 — strategy canary (10 → 50 → 100)\n`)

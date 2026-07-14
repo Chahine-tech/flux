@@ -1,7 +1,7 @@
 import { createServer } from "node:http"
 import { fileURLToPath } from "node:url"
 import { NativeConnection, Worker } from "@temporalio/worker"
-import { createActivities, metricsPrometheusText } from "@flux/orchestration"
+import { createActivities, makePayloadCodec, metricsPrometheusText } from "@flux/orchestration"
 import type { ManagedRuntime } from "effect"
 import type { AppServices } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
@@ -51,6 +51,9 @@ const main = async (): Promise<void> => {
       taskQueue: TASK_QUEUE,
       workflowsPath: fileURLToPath(import.meta.resolve("@flux/orchestration/workflows")),
       activities: createActivities(runtime),
+      // Large payloads are gzip-compressed on the wire and in history (D21).
+      // The codec runs here on the main thread, never inside the workflow VM.
+      dataConverter: { payloadCodecs: [makePayloadCodec()] },
       tuner,
       ...(workerDeploymentOptions ? { workerDeploymentOptions } : {})
     })

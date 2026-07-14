@@ -70,6 +70,10 @@ Choices that go past plumbing:
   a file and reloads a process behind a lock; Caddy PATCHes its admin API,
   stateless and lock-free — and the same canary passes through both without a
   line changing above the port.
+- Payloads above 1 KiB are gzipped on the wire and in Temporal's history by a
+  codec that never enters the workflow VM; a `/codec` endpoint lets the
+  Temporal UI read them back. The integration test asserts the stored history
+  payload really is `binary/gzip`.
 
 ## Layout
 

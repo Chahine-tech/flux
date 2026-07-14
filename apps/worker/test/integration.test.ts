@@ -2,6 +2,8 @@ import { Layer, ManagedRuntime, Redacted } from "effect"
 import { NodeChildProcessSpawner, NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node"
 import { CaddyRouter, HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/adapters"
 import { type AppServices, createActivities, type DeploymentInput, type DeploymentResult, SEARCH_ATTRIBUTES } from "@flux/orchestration"
+import { makePayloadCodec } from "@flux/orchestration"
+import { Client } from "@temporalio/client"
 import { TestWorkflowEnvironment } from "@temporalio/testing"
 import { Worker } from "@temporalio/worker"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
@@ -226,6 +228,50 @@ describe("worker integration", () => {
       expect(last.load_balancing.selection_policy.weights).toEqual([100])
     } finally {
       await runtime.dispose()
+    }
+  }, 90_000)
+
+  it("gzips large payloads on the wire and in history — codec on both sides (D21)", async () => {
+    const configPath = join(tmpdir(), `flux-nginx-codec-${Date.now()}.conf`)
+    const runtime = ManagedRuntime.make(appLayer(baseUrl, configPath))
+    const dataConverter = { payloadCodecs: [makePayloadCodec()] }
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowsPath,
+      activities: createActivities(runtime),
+      dataConverter
+    })
+    // A client with the same codec — the symmetric wiring D21 requires.
+    const client = new Client({
+      connection: env.connection,
+      namespace: env.namespace ?? "default",
+      dataConverter
+    })
+
+    // A PromQL long enough to push the workflow input past the codec threshold.
+    const bigInput: DeploymentInput = {
+      ...input,
+      service: "ledger",
+      rules: [{ name: "errorRate", query: `sum(rate(errors{pod=~"${"x".repeat(2000)}"}[1m]))`, max: 0.01 }]
+    }
+
+    try {
+      const workflowId = `int-codec-${Date.now()}`
+      const result = await worker.runUntil(
+        client.workflow.execute("deploymentWorkflow", { taskQueue: TASK_QUEUE, workflowId, args: [bigInput] })
+      ) as DeploymentResult
+      expect(result.kind).toBe("Succeeded")
+
+      // The payload the server actually stored is the compressed one: fetch the
+      // raw history and check the workflow input's declared encoding.
+      const history = await client.workflow.getHandle(workflowId).fetchHistory()
+      const stored = history.events?.[0]?.workflowExecutionStartedEventAttributes?.input?.payloads?.[0]
+      expect(new TextDecoder().decode(stored?.metadata?.["encoding"] ?? new Uint8Array())).toBe("binary/gzip")
+    } finally {
+      await runtime.dispose()
+      rmSync(configPath, { force: true })
     }
   }, 90_000)
 })

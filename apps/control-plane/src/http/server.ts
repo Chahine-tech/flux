@@ -6,6 +6,7 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { DeploymentRpcs, FluxApi } from "@flux/contracts"
 import { createServer } from "node:http"
 import { DeploymentEvents } from "../deployment-events.ts"
+import { CodecApi, CodecHandlers } from "./codec-server.ts"
 import { DeploymentsHandlers, StatsHandlers } from "./handlers.ts"
 
 /**
@@ -36,7 +37,17 @@ const RpcLive = RpcServer.layerHttp({ group: DeploymentRpcs, path: "/rpc", proto
   Layer.provide(RpcSerialization.layerJson)
 )
 
-const AppLive = Layer.mergeAll(ApiLive, DocsLive, RpcLive)
+// Codec server for the Temporal UI (D21) — deliberately outside FluxApi, so it
+// is not behind the bearer-token middleware. CORS lets the UI call it from the
+// browser (origin configurable for a non-default UI address).
+const CodecLive = HttpApiBuilder.layer(CodecApi).pipe(Layer.provide(CodecHandlers))
+const CorsLive = HttpRouter.cors({
+  allowedOrigins: [process.env.TEMPORAL_UI_ORIGIN ?? "http://localhost:8233"],
+  allowedMethods: ["POST", "OPTIONS"],
+  allowedHeaders: ["content-type", "x-namespace"]
+})
+
+const AppLive = Layer.mergeAll(ApiLive, DocsLive, RpcLive, CodecLive, CorsLive)
 
 export const serverLayer = (options: { readonly port: number }) =>
   HttpRouter.serve(AppLive).pipe(

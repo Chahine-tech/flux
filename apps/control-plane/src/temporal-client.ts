@@ -2,7 +2,7 @@ import { Context, Effect, Layer } from "effect"
 import { DeploymentNotActionable, DeploymentNotFound } from "@flux/contracts"
 import type { DeploymentState, DeploymentSummary, TriggerDeploymentRequest, TriggerMultiRequest } from "@flux/contracts"
 import type { DeploymentInput, MultiServiceInput } from "@flux/orchestration"
-import { SEARCH_ATTRIBUTES } from "@flux/orchestration"
+import { makePayloadCodec, SEARCH_ATTRIBUTES } from "@flux/orchestration"
 import {
   Client,
   Connection,
@@ -186,7 +186,14 @@ export const layer = (config: TemporalClientConfig): Layer.Layer<TemporalClient>
         Effect.promise(() => Connection.connect({ address: config.address })),
         (conn) => Effect.promise(() => conn.close())
       )
-      return make(new Client({ connection, namespace: config.namespace }))
+      return make(
+        new Client({
+          connection,
+          namespace: config.namespace,
+          // Symmetric with the worker (D21): large payloads travel gzipped.
+          dataConverter: { payloadCodecs: [makePayloadCodec()] }
+        })
+      )
     })
   )
 

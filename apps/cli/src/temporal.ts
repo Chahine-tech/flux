@@ -1,5 +1,5 @@
 import { Client, Connection } from "@temporalio/client"
-import { type DeploymentState, SEARCH_ATTRIBUTES } from "@flux/orchestration"
+import { type DeploymentState, makePayloadCodec, SEARCH_ATTRIBUTES } from "@flux/orchestration"
 
 export interface DeploymentSummary {
   readonly workflowId: string
@@ -21,7 +21,14 @@ const namespace = (): string => process.env.TEMPORAL_NAMESPACE ?? "default"
 const withClient = async <A>(use: (client: Client) => Promise<A>): Promise<A> => {
   const connection = await Connection.connect({ address: address() })
   try {
-    return await use(new Client({ connection, namespace: namespace() }))
+    return await use(
+      new Client({
+        connection,
+        namespace: namespace(),
+        // Symmetric with the worker (D21): history payloads may be gzipped.
+        dataConverter: { payloadCodecs: [makePayloadCodec()] }
+      })
+    )
   } finally {
     await connection.close()
   }

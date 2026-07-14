@@ -126,6 +126,9 @@ importers:
       '@temporalio/client':
         specifier: 'catalog:'
         version: 1.20.2
+      '@temporalio/common':
+        specifier: 'catalog:'
+        version: 1.20.2
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.97

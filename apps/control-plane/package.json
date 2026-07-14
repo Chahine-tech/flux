@@ -15,6 +15,7 @@
     "@flux/domain": "workspace:*",
     "@flux/orchestration": "workspace:*",
     "@temporalio/client": "catalog:",
+    "@temporalio/common": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
