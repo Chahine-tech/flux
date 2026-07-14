@@ -1,18 +1,19 @@
 import { Console, Effect, Schema } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { PrometheusMetrics } from "@flux/adapters"
+import type { TriggerDeploymentRequest } from "@flux/contracts"
 import { DeploymentConfig } from "@flux/domain"
 import { configToInput } from "@flux/orchestration"
-import { startDeployment } from "../temporal.ts"
+import { clientLayer, makeClient } from "../control-plane.ts"
 
 /**
  * `flux deploy` — start a canary deployment.
  *
- * Flags build a raw config that is validated through the domain `Schema`
- * (bad percentages / thresholds are rejected here), mapped to the Effect-free
- * workflow input, and used to start the Temporal workflow. Canary steps and
- * thresholds use built-in defaults for N0; loading them from `flux.config.toml`
- * via a ConfigProvider is N1.
+ * Flags build a raw config that is validated through the domain `Schema`, mapped
+ * to the workflow input, and sent to the control plane's `POST /deployments`
+ * (N4) — so the deployment passes the admission controller (global concurrency
+ * budget, one deployment per service) instead of starting the workflow directly.
+ * Canary steps and thresholds use built-in defaults.
  */
 export const deploy = Command.make("deploy", {
   service: Flag.string("service").pipe(Flag.withDescription("Service name")),
@@ -23,6 +24,10 @@ export const deploy = Command.make("deploy", {
   monitor: Flag.string("monitor").pipe(
     Flag.withDefault("30s"),
     Flag.withDescription("Monitoring window per canary step")
+  ),
+  controlPlane: Flag.string("control-plane").pipe(
+    Flag.withDefault("http://localhost:8080"),
+    Flag.withDescription("Control plane base URL")
   )
 }, (config) =>
   Effect.gen(function*() {
@@ -45,9 +50,18 @@ export const deploy = Command.make("deploy", {
     }
 
     const decoded = yield* Schema.decodeUnknownEffect(DeploymentConfig)(raw)
-    const workflowId = yield* Effect.promise(() => startDeployment(configToInput(decoded)))
+    const client = yield* makeClient(config.controlPlane)
+    // The workflow-facing input is structurally the request; the server revalidates it.
+    const payload = configToInput(decoded) as TriggerDeploymentRequest
+    const { workflowId } = yield* client.deployments.trigger({ payload })
 
     yield* Console.log(
       `[flux] started deployment ${workflowId} — ${config.service} → ${config.version} (canary 10→50→100)`
     )
-  }))
+  }).pipe(
+    Effect.provide(clientLayer),
+    Effect.catchTag("DeploymentBudgetExhausted", (error) =>
+      Console.error(`[flux] rejected: concurrency budget full (limit ${error.limit})`)),
+    Effect.catchTag("ServiceAlreadyDeploying", (error) =>
+      Console.error(`[flux] rejected: ${error.service} already has a deployment in flight`))
+  ))

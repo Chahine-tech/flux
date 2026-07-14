@@ -37,3 +37,16 @@ export const TriggerDeploymentResponse = Schema.Struct({
   workflowId: NonEmptyString
 })
 export type TriggerDeploymentResponse = typeof TriggerDeploymentResponse.Type
+
+/**
+ * The body of `POST /deployments/multi` — roll one version out across several
+ * services at once, as a parent workflow over one child per service (N4/D13).
+ */
+export const TriggerMultiRequest = Schema.Struct({
+  services: Schema.NonEmptyArray(TriggerDeploymentRequest),
+  /** How many services roll out concurrently. */
+  maxConcurrency: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(1)),
+  /** If true, the first non-success aborts every in-flight sibling. */
+  failFast: Schema.Boolean
+})
+export type TriggerMultiRequest = typeof TriggerMultiRequest.Type

@@ -28,12 +28,14 @@ const makeSetup = () => {
   let current = state(10)
   const FakeTemporal = Layer.succeed(TemporalClient, {
     start: () => Effect.succeed("wf1"),
+    startMulti: () => Effect.succeed("multi"),
     status: () => Effect.sync(() => current),
     list: () => Effect.succeed([]),
     listRunningIds: () => Effect.succeed(["wf1"]),
     listClosed: () => Effect.succeed([]),
     approve: () => Effect.void,
-    abort: () => Effect.void
+    abort: () => Effect.void,
+    ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
   })
   const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
   return { EventsLive, setState: (next: DeploymentState) => (current = next) }
@@ -67,12 +69,14 @@ describe("deployment events poller", () => {
     const ended: Array<string> = []
     const FakeTemporal = Layer.succeed(TemporalClient, {
       start: () => Effect.succeed("wf1"),
+      startMulti: () => Effect.succeed("multi"),
       status: () => Effect.succeed(state(50)), // service "api"
       list: () => Effect.succeed([]),
       listRunningIds: () => Effect.sync(() => running),
       listClosed: () => Effect.succeed([]),
       approve: () => Effect.void,
-      abort: () => Effect.void
+      abort: () => Effect.void,
+      ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
     })
     const EventsLive = layer({
       pollInterval: "5 seconds",

@@ -26,13 +26,15 @@ const closed: ReadonlyArray<ClosedDeployment> = [
 
 const FakeTemporal = Layer.succeed(TemporalClient, {
   start: () => Effect.succeed("id"),
+  startMulti: () => Effect.succeed("multi"),
   status: () => Effect.die("unused"),
   list: () => Effect.succeed([]),
   listRunningIds: () => Effect.succeed([]),
   // Returned repeatedly — the projection must stay idempotent across ticks.
   listClosed: () => Effect.succeed(closed),
   approve: () => Effect.void,
-  abort: () => Effect.void
+  abort: () => Effect.void,
+  ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
 })
 
 const makeLayer = () => {

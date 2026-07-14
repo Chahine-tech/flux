@@ -24,7 +24,7 @@ export const driftScheduleId = (service: string): string => `flux-drift-${servic
  * interval if it already exists — idempotent, so it is safe to call on every
  * successful deployment.
  */
-export const ensureDriftSchedule = (client: Client, options: DriftScheduleOptions): Effect.Effect<void> =>
+export const ensureDriftSchedule = (client: Client, options: DriftScheduleOptions): Effect.Effect<string> =>
   Effect.promise(async () => {
     const scheduleId = driftScheduleId(options.desired.service)
     const spec = { intervals: [{ every: `${options.everyMs}ms` }] }
@@ -41,4 +41,5 @@ export const ensureDriftSchedule = (client: Client, options: DriftScheduleOption
       // Already exists → keep the desired state and interval current.
       await client.schedule.getHandle(scheduleId).update((previous) => ({ ...previous, spec, action }))
     }
+    return scheduleId
   })

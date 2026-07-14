@@ -6,6 +6,7 @@
  */
 export * from "./api.ts"
 export * from "./deployment.ts"
+export * from "./drift.ts"
 export * from "./rpc.ts"
 export * from "./stats.ts"
 export * from "./trigger.ts"

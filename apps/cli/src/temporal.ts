@@ -1,5 +1,5 @@
 import { Client, Connection } from "@temporalio/client"
-import { type DeploymentInput, type DeploymentState, SEARCH_ATTRIBUTES } from "@flux/orchestration"
+import { type DeploymentState, SEARCH_ATTRIBUTES } from "@flux/orchestration"
 
 export interface DeploymentSummary {
   readonly workflowId: string
@@ -8,12 +8,11 @@ export interface DeploymentSummary {
 }
 
 /**
- * Thin Temporal client helpers for the CLI's `direct` mode (embedded client).
- * Promise-based; the commands wrap these in `Effect.promise`. A proper scoped
- * `TemporalClient` Layer arrives with the control plane (N3).
+ * Thin Temporal client helpers for the CLI's read/control commands (status,
+ * history, approve, abort). Writes (`deploy`, `deploy-multi`) go through the
+ * control plane instead, so they pass admission control.
  */
 
-const TASK_QUEUE = "flux-deployments"
 const WORKFLOW_TYPE = "deploymentWorkflow"
 
 const address = (): string => process.env.TEMPORAL_ADDRESS ?? "localhost:7233"
@@ -27,17 +26,6 @@ const withClient = async <A>(use: (client: Client) => Promise<A>): Promise<A> =>
     await connection.close()
   }
 }
-
-export const startDeployment = (input: DeploymentInput): Promise<string> =>
-  withClient(async (client) => {
-    const workflowId = `dep-${input.service}-${Date.now()}`
-    await client.workflow.start(WORKFLOW_TYPE, {
-      taskQueue: TASK_QUEUE,
-      workflowId,
-      args: [input]
-    })
-    return workflowId
-  })
 
 /** approve/abort are validated Updates — a rejected update surfaces as an error. */
 export const updateDeployment = (

@@ -2,6 +2,8 @@ import { Effect } from "effect"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Command } from "effect/unstable/cli"
 import { deploy } from "./commands/deploy.ts"
+import { deployMulti } from "./commands/deploy-multi.ts"
+import { drift } from "./commands/drift.ts"
 import { history } from "./commands/history.ts"
 import { abort, approve } from "./commands/signals.ts"
 import { status } from "./commands/status.ts"
@@ -9,12 +11,13 @@ import { status } from "./commands/status.ts"
 /**
  * flux CLI — effect/unstable/cli.
  *
- * N0 runs in `direct` mode (embedded Temporal client). A `remote` mode (RPC to
- * the control plane) with runtime Layer selection arrives at N3.
+ * Writes (`deploy`, `deploy-multi`) go through the control plane's HTTP API so
+ * they pass admission control; reads (`status`, `history`) query Temporal
+ * directly. `status --watch` streams over the control plane's websocket.
  */
 const flux = Command.make("flux").pipe(
   Command.withDescription("Progressive deployment orchestrator"),
-  Command.withSubcommands([deploy, approve, abort, status, history])
+  Command.withSubcommands([deploy, deployMulti, drift, approve, abort, status, history])
 )
 
 const run = Command.run(flux, { version: "0.0.0" })

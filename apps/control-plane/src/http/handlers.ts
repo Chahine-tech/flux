@@ -30,6 +30,18 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
         )
         return { workflowId }
       }))
+    .handle("triggerMulti", ({ payload }) =>
+      Effect.gen(function*() {
+        const temporal = yield* TemporalClient
+        const workflowId = yield* temporal.startMulti(payload)
+        return { workflowId }
+      }))
+    .handle("enableDrift", ({ payload }) =>
+      Effect.gen(function*() {
+        const temporal = yield* TemporalClient
+        const scheduleId = yield* temporal.ensureDriftSchedule(payload.service, payload.version, payload.everyMs)
+        return { scheduleId }
+      }))
     .handle("list", ({ query }) =>
       Effect.gen(function*() {
         const temporal = yield* TemporalClient

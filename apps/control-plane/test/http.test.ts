@@ -29,6 +29,7 @@ const runningState = {
 
 const MockTemporal = Layer.succeed(TemporalClient, {
   start: (request) => Effect.succeed(`dep-${request.service}-test`),
+  startMulti: () => Effect.succeed("multi"),
   status: (workflowId) =>
     workflowId === "known"
       ? Effect.succeed(runningState)
@@ -38,7 +39,8 @@ const MockTemporal = Layer.succeed(TemporalClient, {
   listRunningIds: () => Effect.succeed(["dep-checkout-1"]),
   listClosed: () => Effect.succeed([]),
   approve: () => Effect.void,
-  abort: () => Effect.void
+  abort: () => Effect.void,
+  ensureDriftSchedule: () => Effect.succeed("flux-drift-api")
 })
 
 const sampleStats: ServiceStats = {
@@ -131,6 +133,22 @@ describe("control plane HTTP API", () => {
   it("POST /deployments/:id/approve succeeds with no content", async () => {
     const res = await post("/deployments/known/approve")
     expect(res.status).toBe(204)
+  })
+
+  it("POST /deployments/multi starts a multi-service rollout", async () => {
+    const res = await post("/deployments/multi", {
+      services: [validTrigger, { ...validTrigger, service: "web" }],
+      maxConcurrency: 2,
+      failFast: true
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ workflowId: "multi" })
+  })
+
+  it("POST /drift enables a drift-check schedule for a service", async () => {
+    const res = await post("/drift", { service: "api", version: "v2", everyMs: 60_000 })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ scheduleId: "flux-drift-api" })
   })
 
   it("GET /stats returns the read model's aggregations", async () => {

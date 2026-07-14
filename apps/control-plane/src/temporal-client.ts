@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from "effect"
 import { DeploymentNotActionable, DeploymentNotFound } from "@flux/contracts"
-import type { DeploymentState, DeploymentSummary, TriggerDeploymentRequest } from "@flux/contracts"
-import type { DeploymentInput } from "@flux/orchestration"
+import type { DeploymentState, DeploymentSummary, TriggerDeploymentRequest, TriggerMultiRequest } from "@flux/contracts"
+import type { DeploymentInput, MultiServiceInput } from "@flux/orchestration"
 import { SEARCH_ATTRIBUTES } from "@flux/orchestration"
 import {
   Client,
@@ -9,6 +9,7 @@ import {
   WorkflowNotFoundError,
   WorkflowUpdateFailedError
 } from "@temporalio/client"
+import { ensureDriftSchedule as ensureDriftScheduleImpl } from "./schedules.ts"
 
 /**
  * Port to Temporal for the control plane — the single place the HTTP handlers
@@ -18,6 +19,8 @@ import {
  */
 export class TemporalClient extends Context.Service<TemporalClient, {
   readonly start: (request: TriggerDeploymentRequest) => Effect.Effect<string>
+  /** Start a multi-service rollout (a parent workflow over one child per service). */
+  readonly startMulti: (request: TriggerMultiRequest) => Effect.Effect<string>
   readonly status: (workflowId: string) => Effect.Effect<DeploymentState, DeploymentNotFound>
   readonly list: (
     service: string | undefined,
@@ -31,6 +34,12 @@ export class TemporalClient extends Context.Service<TemporalClient, {
     workflowId: string
   ) => Effect.Effect<void, DeploymentNotFound | DeploymentNotActionable>
   readonly abort: (workflowId: string) => Effect.Effect<void, DeploymentNotFound>
+  /** Create/update the drift-check Schedule for a service (N4/D17); returns its id. */
+  readonly ensureDriftSchedule: (
+    service: string,
+    version: string,
+    everyMs: number
+  ) => Effect.Effect<string>
 }>()("TemporalClient") {}
 
 const TASK_QUEUE = "flux-deployments"
@@ -65,6 +74,17 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           workflowId,
           // The request is structurally the workflow's Effect-free input (D6).
           args: [request as DeploymentInput]
+        })
+        return workflowId
+      }),
+
+    startMulti: (request) =>
+      Effect.promise(async () => {
+        const workflowId = `multi-${Date.now()}`
+        await client.workflow.start("multiServiceDeployment", {
+          taskQueue: TASK_QUEUE,
+          workflowId,
+          args: [request as MultiServiceInput]
         })
         return workflowId
       }),
@@ -135,6 +155,12 @@ export const make = (client: Client): typeof TemporalClient.Service => {
       Effect.tryPromise({
         try: () => handle(workflowId).executeUpdate("abort"),
         catch: (error) => classifyNotFound(error, workflowId)
+      }),
+
+    ensureDriftSchedule: (service, version, everyMs) =>
+      ensureDriftScheduleImpl(client, {
+        desired: { service, desired: [{ version, weight: 100 }], reconcile: true },
+        everyMs
       })
   }
 }

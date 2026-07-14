@@ -1,8 +1,9 @@
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { DeploymentState, DeploymentSummary } from "./deployment.ts"
+import { EnableDriftRequest, EnableDriftResponse } from "./drift.ts"
 import { StatsResponse } from "./stats.ts"
-import { TriggerDeploymentRequest, TriggerDeploymentResponse } from "./trigger.ts"
+import { TriggerDeploymentRequest, TriggerDeploymentResponse, TriggerMultiRequest } from "./trigger.ts"
 
 /**
  * The flux HTTP API — one declarative definition shared by both ends (N3).
@@ -49,6 +50,18 @@ const deployments = HttpApiGroup.make("deployments")
       payload: TriggerDeploymentRequest,
       success: TriggerDeploymentResponse,
       error: [DeploymentBudgetExhausted, ServiceAlreadyDeploying]
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("triggerMulti", "/deployments/multi", {
+      payload: TriggerMultiRequest,
+      success: TriggerDeploymentResponse
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("enableDrift", "/drift", {
+      payload: EnableDriftRequest,
+      success: EnableDriftResponse
     })
   )
   .add(
