@@ -61,7 +61,10 @@ beforeAll(async () => {
       [SEARCH_ATTRIBUTES.version]: KEYWORD,
       [SEARCH_ATTRIBUTES.status]: KEYWORD
     }
-  }).catch(() => {})
+  }).catch((error: unknown) => {
+    // Ignore "already registered"; surface anything unexpected.
+    if (!/already exist/i.test(String(error))) throw error
+  })
 }, 60_000)
 
 afterAll(async () => {

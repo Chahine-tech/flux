@@ -59,7 +59,10 @@ beforeAll(async () => {
       [SEARCH_ATTRIBUTES.version]: KEYWORD,
       [SEARCH_ATTRIBUTES.status]: KEYWORD
     }
-  }).catch(() => {})
+  }).catch((error: unknown) => {
+    // Ignore "already registered"; surface anything unexpected.
+    if (!/already exist/i.test(String(error))) throw error
+  })
 }, 60_000)
 
 afterAll(async () => {
@@ -84,6 +87,23 @@ const run = async (
       args: [input]
     })
   ) as Promise<DeploymentResult>
+}
+
+// Poll the workflow's `status` query until it reaches `phase`. Time-skipping
+// fast-forwards the workflow's own timers, but reaching a queryable phase still
+// takes a few real milliseconds, so we poll rather than assume a delay. Throws
+// if the phase never arrives, which fails the test with a clear message.
+const waitForPhase = async (
+  query: () => Promise<DeploymentState>,
+  phase: DeploymentState["phase"],
+  tries = 100
+): Promise<DeploymentState> => {
+  for (let i = 0; i < tries; i++) {
+    const state = await query()
+    if (state.phase === phase) return state
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error(`workflow never reached phase "${phase}"`)
 }
 
 describe("deploymentWorkflow", () => {
@@ -126,12 +146,7 @@ describe("deploymentWorkflow", () => {
         workflowId: `wf-approve-${Date.now()}`,
         args: [input]
       })
-      for (let i = 0; i < 50; i++) {
-        const s = await handle.query<DeploymentState>("status")
-        if (s.phase === "awaiting-approval") break
-        await new Promise((r) => setTimeout(r, 50))
-      }
-      const parked = await handle.query<DeploymentState>("status")
+      const parked = await waitForPhase(() => handle.query<DeploymentState>("status"), "awaiting-approval")
       expect(parked.phase).toBe("awaiting-approval")
       expect(parked.currentPercent).toBe(50)
       await handle.executeUpdate("approve")
@@ -164,10 +179,7 @@ describe("deploymentWorkflow", () => {
         workflowId: `wf-abort-${Date.now()}`,
         args: [input]
       })
-      for (let i = 0; i < 50; i++) {
-        if ((await handle.query<DeploymentState>("status")).phase === "awaiting-approval") break
-        await new Promise((r) => setTimeout(r, 50))
-      }
+      await waitForPhase(() => handle.query<DeploymentState>("status"), "awaiting-approval")
       await handle.executeUpdate("abort")
       return handle.result()
     })) as DeploymentResult
@@ -203,10 +215,7 @@ describe("deploymentWorkflow", () => {
         workflowId: `wf-cancel-${Date.now()}`,
         args: [input]
       })
-      for (let i = 0; i < 100; i++) {
-        if ((await handle.query<DeploymentState>("status")).phase === "monitoring") break
-        await new Promise((r) => setTimeout(r, 50))
-      }
+      await waitForPhase(() => handle.query<DeploymentState>("status"), "monitoring")
       await handle.executeUpdate("abort")
       return handle.result()
     })) as DeploymentResult

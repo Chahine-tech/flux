@@ -67,6 +67,10 @@ const withHeartbeatAndCancellation = <A, E>(
     return yield* Effect.raceFirst(effect, cancelled)
   }).pipe(Effect.scoped)
 
+/** A Schema decode failure crossing into Temporal — non-retryable and tagged. */
+const invalidActivityInput = (error: unknown): ApplicationFailure =>
+  ApplicationFailure.nonRetryable(`invalid activity input: ${String(error)}`, "InvalidActivityInput")
+
 /**
  * Bridge Effect → Promise for Temporal.
  *
@@ -86,9 +90,7 @@ export const createActivities = (
   ): Promise<A> =>
     runtime.runPromise(
       decode(raw).pipe(
-        Effect.mapError((error) =>
-          ApplicationFailure.nonRetryable(`invalid activity input: ${String(error)}`, "InvalidActivityInput")
-        ),
+        Effect.mapError(invalidActivityInput),
         Effect.flatMap((params) => Effect.mapError(toEffect(params), toApplicationFailure))
       )
     )
@@ -109,9 +111,7 @@ export const createActivities = (
     monitorStep: (params) =>
       runtime.runPromise(
         decodeMonitor(params).pipe(
-          Effect.mapError((error) =>
-            ApplicationFailure.nonRetryable(`invalid activity input: ${String(error)}`, "InvalidActivityInput")
-          ),
+          Effect.mapError(invalidActivityInput),
           Effect.flatMap((p) =>
             withHeartbeatAndCancellation(
               Effect.mapError(
