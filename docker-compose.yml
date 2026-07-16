@@ -40,6 +40,9 @@ services:
       - temporal
     environment:
       TEMPORAL_ADDRESS: temporal:7233
+      # The browser (not the UI server) calls this endpoint, so it points at
+      # the control plane on the host. Gzipped payloads render as JSON again.
+      TEMPORAL_CODEC_ENDPOINT: http://localhost:8080/codec
     ports:
       - "8233:8080"
 

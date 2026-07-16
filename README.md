@@ -123,6 +123,9 @@ plane's client, trigger through outcome. Multi-service fail-fast. The cancellabl
 monitor. `continueAsNew`. And, with the real adapters pointed at local HTTP
 doubles, a full canary to `Succeeded` that checks the side effects actually
 happened: the health endpoint got probed, the nginx config got written.
+Two captured histories — a promotion and a rollback — are committed and
+replayed against the current workflow code on every run, so an edit that would
+break in-flight deployments fails as a determinism error before it ships.
 
 **In isolation.** The STM admission controller (five concurrent triggers, a
 budget of two, exactly two admitted). Drift comparison and reconciliation. The

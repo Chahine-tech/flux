@@ -30,3 +30,11 @@ catalog:
 minimumReleaseAgeExclude:
   - rolldown-plugin-dts@0.27.8
   - tsdown@0.22.7
+
+# historyToJSON (used by the D22 replay-fixture capture) only works with
+# proto3-json-serializer 2.0.0: 2.0.1+ throws on bytes map values before the
+# SDK can fix them up — documented in @temporalio/common's own proto-utils
+# (googleapis/proto3-json-serializer-nodejs#103). Scoped to the one package
+# that needs it; remove once the Temporal SDK pins or fixes this itself.
+overrides:
+  "@temporalio/common>proto3-json-serializer": 2.0.0

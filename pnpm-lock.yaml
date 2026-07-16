@@ -49,6 +49,9 @@ catalogs:
       specifier: ^4.1.10
       version: 4.1.10
 
+overrides:
+  '@temporalio/common>proto3-json-serializer': 2.0.0
+
 importers:
 
   .:
@@ -338,6 +341,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+      '@temporalio/client':
+        specifier: 'catalog:'
+        version: 1.20.2
       '@temporalio/testing':
         specifier: 'catalog:'
         version: 1.20.2(esbuild@0.28.1)(tslib@2.8.1)
@@ -1857,8 +1863,8 @@ packages:
     resolution: {integrity: sha512-vuwillviilfKZsg0VGj5R/YwwcHx4SLsIOI/7K6mQkWx+l5cUHTjj5g0AasTBcyXsbfTgrwsUNmVUb5xVwyPwg==}
     engines: {node: ^10 || ^12 || >=14}
 
-  proto3-json-serializer@2.0.2:
-    resolution: {integrity: sha512-SAzp/O4Yh02jGdRc+uIrGoe87dkN/XtwxfZ4ZyafJHymd79ozp5VG5nyZ7ygqPM5+cpLDjjGnYFUkngonyDPOQ==}
+  proto3-json-serializer@2.0.0:
+    resolution: {integrity: sha512-FB/YaNrpiPkyQNSNPilpn8qn0KdEfkgmJ9JP93PQyF/U4bAiXY5BiUdDhiDO4S48uSQ6AesklgVlrKiqZPzegw==}
     engines: {node: '>=14.0.0'}
 
   protobufjs@7.6.5:
@@ -2729,7 +2735,7 @@ snapshots:
       long: 5.3.2
       ms: 3.0.0-canary.1
       nexus-rpc: 0.0.2
-      proto3-json-serializer: 2.0.2
+      proto3-json-serializer: 2.0.0
 
   '@temporalio/core-bridge@1.20.2':
     dependencies:
@@ -3492,7 +3498,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  proto3-json-serializer@2.0.2:
+  proto3-json-serializer@2.0.0:
     dependencies:
       protobufjs: 7.6.5
 
