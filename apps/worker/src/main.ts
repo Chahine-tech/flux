@@ -1,7 +1,7 @@
 import { createServer } from "node:http"
 import { fileURLToPath } from "node:url"
 import { NativeConnection, Worker } from "@temporalio/worker"
-import { createActivities, makePayloadCodec, metricsPrometheusText } from "@flux/orchestration"
+import { activityInterceptors, createActivities, makePayloadCodec, metricsPrometheusText } from "@flux/orchestration"
 import type { ManagedRuntime } from "effect"
 import type { AppServices } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
@@ -54,6 +54,12 @@ const main = async (): Promise<void> => {
       // Large payloads are gzip-compressed on the wire and in history (D21).
       // The codec runs here on the main thread, never inside the workflow VM.
       dataConverter: { payloadCodecs: [makePayloadCodec()] },
+      // One trace end to end (D24): the workflow-side hop is a bundled module
+      // (Effect-free, D6-safe); the activity-side hop reads it back here.
+      interceptors: {
+        activity: [activityInterceptors],
+        workflowModules: [fileURLToPath(import.meta.resolve("@flux/orchestration/tracing/workflow-interceptors"))]
+      },
       tuner,
       ...(workerDeploymentOptions ? { workerDeploymentOptions } : {})
     })

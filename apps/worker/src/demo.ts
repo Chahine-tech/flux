@@ -3,7 +3,14 @@ import { Client, Connection } from "@temporalio/client"
 import { NativeConnection, Worker } from "@temporalio/worker"
 import { fileURLToPath } from "node:url"
 import { HealthPort, MetricsPort, NotifyPort, RouterPort } from "@flux/application"
-import { createActivities, type DeploymentInput, type DeploymentResult, makePayloadCodec } from "@flux/orchestration"
+import {
+  activityInterceptors,
+  createActivities,
+  type DeploymentInput,
+  type DeploymentResult,
+  makePayloadCodec,
+  traceparentClientInterceptor
+} from "@flux/orchestration"
 
 /**
  * Self-contained e2e demo — runs the real canary workflow against a real
@@ -86,7 +93,11 @@ const main = async (): Promise<void> => {
     taskQueue,
     workflowsPath: fileURLToPath(import.meta.resolve("@flux/orchestration/workflows")),
     activities: createActivities(runtime),
-    dataConverter: { payloadCodecs: [makePayloadCodec()] }
+    dataConverter: { payloadCodecs: [makePayloadCodec()] },
+    interceptors: {
+      activity: [activityInterceptors],
+      workflowModules: [fileURLToPath(import.meta.resolve("@flux/orchestration/tracing/workflow-interceptors"))]
+    }
   })
 
   try {
@@ -95,7 +106,8 @@ const main = async (): Promise<void> => {
       const client = new Client({
         connection,
         namespace,
-        dataConverter: { payloadCodecs: [makePayloadCodec()] }
+        dataConverter: { payloadCodecs: [makePayloadCodec()] },
+        interceptors: { workflow: [traceparentClientInterceptor] }
       })
       const workflowId = `demo-${Date.now()}`
 

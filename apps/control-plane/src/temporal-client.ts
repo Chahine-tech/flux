@@ -2,7 +2,7 @@ import { Context, Effect, Layer } from "effect"
 import { DeploymentNotActionable, DeploymentNotFound } from "@flux/contracts"
 import type { DeploymentState, DeploymentSummary, TriggerDeploymentRequest, TriggerMultiRequest } from "@flux/contracts"
 import type { DeploymentInput, MultiServiceInput } from "@flux/orchestration"
-import { makePayloadCodec, SEARCH_ATTRIBUTES } from "@flux/orchestration"
+import { makePayloadCodec, SEARCH_ATTRIBUTES, traceparentClientInterceptor, withClientTraceContext } from "@flux/orchestration"
 import {
   Client,
   Connection,
@@ -68,8 +68,10 @@ export const make = (client: Client): typeof TemporalClient.Service => {
   const handle = (workflowId: string) => client.workflow.getHandle(workflowId)
 
   return {
+    // D24: the current span (the HTTP request's) becomes the trace root the
+    // whole deployment — CLI/control-plane through every activity — shares.
     start: (request) =>
-      Effect.promise(async () => {
+      withClientTraceContext(async () => {
         const workflowId = `dep-${request.service}-${Date.now()}`
         await client.workflow.start(WORKFLOW_TYPE, {
           taskQueue: TASK_QUEUE,
@@ -81,7 +83,7 @@ export const make = (client: Client): typeof TemporalClient.Service => {
       }),
 
     startMulti: (request) =>
-      Effect.promise(async () => {
+      withClientTraceContext(async () => {
         const workflowId = `multi-${Date.now()}`
         await client.workflow.start("multiServiceDeployment", {
           taskQueue: TASK_QUEUE,
@@ -191,7 +193,8 @@ export const layer = (config: TemporalClientConfig): Layer.Layer<TemporalClient>
           connection,
           namespace: config.namespace,
           // Symmetric with the worker (D21): large payloads travel gzipped.
-          dataConverter: { payloadCodecs: [makePayloadCodec()] }
+          dataConverter: { payloadCodecs: [makePayloadCodec()] },
+          interceptors: { workflow: [traceparentClientInterceptor] }
         })
       )
     })

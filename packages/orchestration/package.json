@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./workflows": "./src/workflows/index.ts",
-    "./activities": "./src/activities/index.ts"
+    "./activities": "./src/activities/index.ts",
+    "./tracing/workflow-interceptors": "./src/tracing/workflow-interceptors.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -16,15 +17,15 @@
     "@flux/application": "workspace:*",
     "@flux/domain": "workspace:*",
     "@temporalio/activity": "catalog:",
+    "@temporalio/client": "catalog:",
     "@temporalio/common": "catalog:",
+    "@temporalio/worker": "catalog:",
     "@temporalio/workflow": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@temporalio/client": "catalog:",
     "@temporalio/testing": "catalog:",
-    "@temporalio/worker": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

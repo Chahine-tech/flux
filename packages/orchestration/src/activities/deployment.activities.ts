@@ -1,9 +1,10 @@
-import { Duration, Effect, type ManagedRuntime, Schema, Tracer } from "effect"
+import { Duration, Effect, type ManagedRuntime, Schema } from "effect"
 import type { HealthPort, MetricsPort, NotifyPort, RouterPort } from "@flux/application"
 import { healthCheck, monitorStep, notify, readRouterState, shiftTraffic } from "@flux/application"
 import { Context as ActivityContext } from "@temporalio/activity"
 import { ApplicationFailure } from "@temporalio/common"
 import { recordOutcome, recordTrafficShift } from "../metrics.ts"
+import { currentActivityTraceParent } from "../tracing/activity-interceptor.ts"
 import { type FluxError, toApplicationFailure } from "./activity-error.ts"
 import { HealthCheckParams, MonitorStepParams, NotifyParams, ReadRouterStateParams, SetTrafficWeightParams } from "./schemas.ts"
 import type { DeploymentActivities } from "./types.ts"
@@ -12,28 +13,15 @@ import type { DeploymentActivities } from "./types.ts"
 export type AppServices = HealthPort | MetricsPort | NotifyPort | RouterPort
 
 /**
- * Distributed tracing (N2, path B): every activity of one deployment shares a
- * trace derived from the workflow run id, so the whole deployment shows up as a
- * single trace in Jaeger. The activity self-derives the trace context from its
- * own Temporal `Context` — no OpenTelemetry SDK, no interceptors, no header
- * plumbing. `Effect.withParentSpan` re-parents the use case's own spans onto it.
+ * Distributed tracing (D24, replaces N2/voie B): every activity of one
+ * deployment shares the trace the CLI/control-plane started, propagated
+ * through Temporal headers by a client + activity interceptor pair (see
+ * `../tracing/`). `Effect.withParentSpan` re-parents the use case's own spans
+ * onto it. Falls back to no parent when the header is absent (e.g. unit
+ * tests, or a client that predates D24).
  */
-const deploymentTraceParent = (): Tracer.ExternalSpan | undefined => {
-  let runId: string | undefined
-  try {
-    runId = ActivityContext.current().info.workflowExecution?.runId
-  } catch {
-    return undefined // not running inside an activity (e.g. unit tests)
-  }
-  if (runId === undefined) {
-    return undefined
-  }
-  const traceId = runId.replace(/-/g, "").padEnd(32, "0").slice(0, 32)
-  return Tracer.externalSpan({ traceId, spanId: traceId.slice(0, 16) })
-}
-
 const linkToDeployment = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
-  const parent = deploymentTraceParent()
+  const parent = currentActivityTraceParent()
   return parent === undefined ? effect : effect.pipe(Effect.withParentSpan(parent))
 }
 

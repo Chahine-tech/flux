@@ -1,5 +1,5 @@
 import { Client, Connection } from "@temporalio/client"
-import { type DeploymentState, makePayloadCodec, SEARCH_ATTRIBUTES } from "@flux/orchestration"
+import { type DeploymentState, makePayloadCodec, SEARCH_ATTRIBUTES, traceparentClientInterceptor } from "@flux/orchestration"
 
 export interface DeploymentSummary {
   readonly workflowId: string
@@ -26,7 +26,8 @@ const withClient = async <A>(use: (client: Client) => Promise<A>): Promise<A> =>
         connection,
         namespace: namespace(),
         // Symmetric with the worker (D21): history payloads may be gzipped.
-        dataConverter: { payloadCodecs: [makePayloadCodec()] }
+        dataConverter: { payloadCodecs: [makePayloadCodec()] },
+        interceptors: { workflow: [traceparentClientInterceptor] }
       })
     )
   } finally {
