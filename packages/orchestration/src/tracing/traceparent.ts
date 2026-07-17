@@ -9,7 +9,9 @@ import type { Payload } from "@temporalio/common"
 
 export const TRACEPARENT_HEADER_KEY = "traceparent"
 
-const TRACEPARENT_PATTERN = /^00-([0-9a-f]{32})-([0-9a-f]{16})-\d{2}$/
+// Flags are hex per W3C (e.g. `01` sampled, but `ff` is valid) — we only ever
+// emit `01`, yet parse must accept any spec-compliant value.
+const TRACEPARENT_PATTERN = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/
 
 export const formatTraceparent = (traceId: string, spanId: string): string => `00-${traceId}-${spanId}-01`
 

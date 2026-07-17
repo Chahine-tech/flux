@@ -118,8 +118,11 @@ describe.skipIf(!REAL)("flux-as-a-service via Temporal Nexus (N9/D25)", () => {
       activities: {}
     })
 
+    // Unique per run: namespaces persist across test runs, so a fixed service
+    // name would let a previous run's execution satisfy the assertion below.
+    const service = `checkout-${Date.now()}`
     const input: DeploymentInput = {
-      service: "checkout",
+      service,
       version: "v2",
       previousVersion: "v1",
       steps: [{ percent: 100, monitorMs: 0, requiresApproval: false }],
@@ -147,15 +150,16 @@ describe.skipIf(!REAL)("flux-as-a-service via Temporal Nexus (N9/D25)", () => {
 
     expect(result.kind).toBe("Succeeded")
 
-    // The workflow the caller actually observed ran in the platform namespace,
-    // under the Nexus-derived workflow id — proving the cross-namespace hop,
-    // not just that some workflow somewhere completed.
+    // The workflow THIS run triggered ran in the platform namespace, under the
+    // exact deterministic id the Nexus handler derives (service is unique per
+    // run, so no earlier execution can satisfy this) — proving the
+    // cross-namespace hop, not just that some workflow somewhere completed.
     const platformExecutions: Array<string> = []
     for await (
       const execution of platformClient.workflow.list({ query: "WorkflowType = 'deploymentWorkflow'" })
     ) {
       platformExecutions.push(execution.workflowId)
     }
-    expect(platformExecutions.some((id) => id.startsWith("nexus-deploy-checkout-"))).toBe(true)
+    expect(platformExecutions).toContain(`nexus-deploy-${service}-v2`)
   }, 60_000)
 }, 120_000)

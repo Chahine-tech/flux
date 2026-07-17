@@ -13,5 +13,9 @@ const ENDPOINT = "flux-deploy"
 
 export async function nexusCallerWorkflow(input: DeploymentInput): Promise<DeploymentResult> {
   const client = wf.createNexusServiceClient({ service: DeployService, endpoint: ENDPOINT })
-  return await client.executeOperation("runCanary", input, { scheduleToCloseTimeout: "5 minutes" })
+  // The operation spans the whole backing canary, and a canary's monitoring
+  // windows are long by design (a 15-minute canary is the README's opening
+  // example) — a short schedule-to-close would time the operation out
+  // mid-monitor. Sized for the longest realistic rollout, not for the test.
+  return await client.executeOperation("runCanary", input, { scheduleToCloseTimeout: "2 hours" })
 }

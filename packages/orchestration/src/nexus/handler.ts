@@ -19,7 +19,16 @@ import { DeployService } from "./service.ts"
 export const DeployServiceHandler = serviceHandler(DeployService, {
   runCanary: new WorkflowRunOperationHandler<DeploymentInput, DeploymentResult>(async (ctx, input) =>
     startWorkflow<typeof deploymentWorkflow>(ctx, "deploymentWorkflow", {
-      workflowId: `nexus-deploy-${input.service}-${Date.now()}`,
+      // Business-meaningful, deterministic — the id is what dedupes a retried
+      // Nexus start (delivery is at-least-once: a handler that started the
+      // workflow but crashed before replying gets re-invoked, and a
+      // `Date.now()` here would start a SECOND canary for the same
+      // deployment). Same key shape as the comparison package's
+      // `idempotencyKey` (D23) — the two engines agree on what identifies a
+      // deployment. A re-deploy of the same service+version after completion
+      // is still allowed (default workflow-id reuse policy); one while it is
+      // already running is rejected, which is admission control behaving.
+      workflowId: `nexus-deploy-${input.service}-${input.version}`,
       args: [input]
     }))
 })
