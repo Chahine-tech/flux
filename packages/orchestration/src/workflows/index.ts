@@ -3,3 +3,4 @@
 export * from "./deployment.workflow.ts"
 export * from "./drift-check.workflow.ts"
 export * from "./multi-service.workflow.ts"
+export * from "./nexus-caller.workflow.ts"

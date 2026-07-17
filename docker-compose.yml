@@ -29,8 +29,16 @@ services:
       POSTGRES_PWD: temporal
       POSTGRES_SEEDS: postgresql
       DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+      # Without this, the entrypoint defaults BIND_ON_IP to the container's own
+      # resolved IP, so the frontend HTTP port only accepts connections on that
+      # address — not 127.0.0.1, which is what the server's own Nexus callback
+      # config (below) and clusterMetadata.httpAddress default to. Binding on
+      # all interfaces makes the server reachable from itself, other
+      # containers, and the host alike (N9/D25).
+      BIND_ON_IP: "0.0.0.0"
     ports:
       - "7233:7233"
+      - "7243:7243"
     volumes:
       - ./infra/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
 

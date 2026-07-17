@@ -5,3 +5,16 @@ frontend.enableUpdateWorkflowExecution:
   - value: true
 frontend.enableUpdateWorkflowExecutionAsyncAccepted:
   - value: true
+
+# Nexus (N9/D25) — required on server <1.30, which is not enabled by default.
+# The frontend HTTP port (7243) and its address are already the config
+# template's own defaults (services.frontend.rpc.httpPort,
+# clusterMetadata.clusterInformation.active.httpAddress) — nothing to change
+# there. This deployment is single-cluster and single-node, so the callback
+# just points the server at itself. Dev-only: unrestricted + insecure allowed.
+component.nexusoperations.callback.endpoint.template:
+  - value: "http://127.0.0.1:7243/namespaces/{{.NamespaceName}}/nexus/callback"
+component.callbacks.allowedAddresses:
+  - value:
+      - Pattern: "*"
+        AllowInsecure: true

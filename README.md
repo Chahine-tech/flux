@@ -74,6 +74,19 @@ Choices that go past plumbing:
   codec that never enters the workflow VM; a `/codec` endpoint lets the
   Temporal UI read them back. The integration test asserts the stored history
   payload really is `binary/gzip`.
+- A deployment is one trace, not two. Client and activity interceptors carry a
+  W3C `traceparent` through Temporal's own headers — the workflow has to
+  forward it to every activity it schedules itself, Temporal doesn't do that
+  for you — replacing an earlier version that faked a trace root from the
+  workflow's run id. Proven the same way as the codec: the raw history shows
+  the same header on the start event and the first activity's scheduled event.
+- A separate experiment reimplements the same canary — same domain types, same
+  activities — on Effect's own `effect/unstable/workflow` instead of Temporal,
+  to see what a durable-execution engine native to Effect actually buys you.
+  It lives in `packages/comparison`, is never imported by the running app, and
+  found real differences: no worker/runtime bridge is needed at all, and
+  compensations are wired to the typed error channel instead of a hand-rolled
+  saga.
 
 ## Layout
 
@@ -85,6 +98,7 @@ A pnpm + Turborepo monorepo.
 | `@flux/application` | Use cases and the four ports: metrics, router, health, notify |
 | `@flux/adapters` | Port implementations: Prometheus, nginx, Caddy, HTTP health, Slack |
 | `@flux/orchestration` | Temporal workflows and activities |
+| `@flux/comparison` | The same canary on Effect's own workflow engine — an experiment, not shipped |
 | `@flux/contracts` | Shared HTTP + RPC schemas, so the CLI and control plane agree |
 | `@flux/config` | TOML + env configuration |
 | `apps/worker` | Runs the Temporal worker |
@@ -132,12 +146,16 @@ budget of two, exactly two admitted). Drift comparison and reconciliation. The
 SQLite projection and its aggregation query. The poller's delta suppression.
 
 **Against a real cluster, in CI.** The time-skipping server implements neither
-worker versioning, nor the tuner's native config, nor Schedules — so a second CI
-job boots the repo's own compose and proves them for real: a versioned worker
-pins the workflow it ran (the `describe` shows the deployment and build id), a
-worker running the production tuner completes a canary, and the drift Schedule's
-create → update-in-place → delete lifecycle holds. This tier exists because
-running things for real kept finding bugs the type checker was happy with.
+worker versioning, nor the tuner's native config, nor Schedules, nor Nexus — so
+a second CI job boots the repo's own compose and proves them for real: a
+versioned worker pins the workflow it ran (the `describe` shows the deployment
+and build id), a worker running the production tuner completes a canary, the
+drift Schedule's create → update-in-place → delete lifecycle holds, and a
+second namespace triggers a canary in a separate platform namespace through a
+registered Nexus endpoint — with no other access to it — and the run completes
+under the workflow id the cross-namespace call actually produced. This tier
+exists because running things for real kept finding bugs the type checker was
+happy with.
 
 ---
 

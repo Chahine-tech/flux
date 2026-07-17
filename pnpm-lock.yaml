@@ -24,6 +24,9 @@ catalogs:
     '@temporalio/common':
       specifier: ^1.20.2
       version: 1.20.2
+    '@temporalio/nexus':
+      specifier: ^1.20.2
+      version: 1.20.2
     '@temporalio/testing':
       specifier: ^1.20.2
       version: 1.20.2
@@ -39,6 +42,9 @@ catalogs:
     effect:
       specifier: 4.0.0-beta.97
       version: 4.0.0-beta.97
+    nexus-rpc:
+      specifier: ^0.0.2
+      version: 0.0.2
     tsx:
       specifier: ^4.19.0
       version: 4.23.0
@@ -359,6 +365,9 @@ importers:
       '@temporalio/common':
         specifier: 'catalog:'
         version: 1.20.2
+      '@temporalio/nexus':
+        specifier: 'catalog:'
+        version: 1.20.2
       '@temporalio/worker':
         specifier: 'catalog:'
         version: 1.20.2(esbuild@0.28.1)(tslib@2.8.1)
@@ -368,6 +377,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.97
+      nexus-rpc:
+        specifier: 'catalog:'
+        version: 0.0.2
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'

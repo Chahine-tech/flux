@@ -19,9 +19,11 @@
     "@temporalio/activity": "catalog:",
     "@temporalio/client": "catalog:",
     "@temporalio/common": "catalog:",
+    "@temporalio/nexus": "catalog:",
     "@temporalio/worker": "catalog:",
     "@temporalio/workflow": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "nexus-rpc": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
