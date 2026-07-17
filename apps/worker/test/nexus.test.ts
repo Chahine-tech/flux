@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url"
 import { Client, Connection } from "@temporalio/client"
 import { bundleWorkflowCode, NativeConnection, Worker } from "@temporalio/worker"
 import type { DeploymentActivities, DeploymentInput, DeploymentResult } from "@flux/orchestration"
-import { DeployServiceHandler } from "@flux/orchestration"
+import { DeployServiceHandler } from "@flux/orchestration/nexus"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { ensureSearchAttributes } from "../src/search-attributes.ts"
 

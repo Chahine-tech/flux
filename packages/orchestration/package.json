@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./workflows": "./src/workflows/index.ts",
     "./activities": "./src/activities/index.ts",
+    "./nexus": "./src/nexus/handler.ts",
     "./tracing/workflow-interceptors": "./src/tracing/workflow-interceptors.ts"
   },
   "scripts": {
