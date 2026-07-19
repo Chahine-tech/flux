@@ -9,6 +9,7 @@ import {
   defineUpdate,
   isCancellation,
   log,
+  patched,
   proxyActivities,
   proxyLocalActivities,
   setHandler,
@@ -163,6 +164,23 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
   return result
 
   async function runCanary(): Promise<DeploymentResult> {
+    // 0. Announce the deployment (D26). The `started` notification always
+    //    existed in the Notification contract but was never sent — added
+    //    behind `patched()` because inserting an activity changes the command
+    //    sequence, exactly the edit that would break replay of every history
+    //    recorded before it (the D22 fixtures prove the guard works: they
+    //    replay through the else-branch). `deprecatePatch` is deliberately NOT
+    //    next: the committed fixtures stand in for in-flight production
+    //    executions, and the replay lock refuses the deprecation while they
+    //    exist — that is the patch lifecycle working, not a leftover.
+    if (resume === undefined && patched("notify-deployment-started")) {
+      await acts.notify({
+        kind: "started",
+        service: input.service,
+        message: `deploying ${input.version} (canary over ${input.steps.length} steps)`
+      })
+    }
+
     // 1. Health-check the new version before shifting any traffic (local activity).
     //    A resumed run already passed this in its first incarnation.
     if (resume === undefined) {
