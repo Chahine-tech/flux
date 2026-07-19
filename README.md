@@ -81,12 +81,11 @@ Choices that go past plumbing:
   workflow's run id. Proven the same way as the codec: the raw history shows
   the same header on the start event and the first activity's scheduled event.
 - A separate experiment reimplements the same canary — same domain types, same
-  activities — on Effect's own `effect/unstable/workflow` instead of Temporal,
-  to see what a durable-execution engine native to Effect actually buys you.
+  activities — on Effect's own `effect/unstable/workflow` instead of Temporal.
   It lives in `packages/comparison`, is never imported by the running app, and
-  found real differences: no worker/runtime bridge is needed at all, and
-  compensations are wired to the typed error channel instead of a hand-rolled
-  saga.
+  its durability is proven the blunt way: a test SIGKILLs the process
+  mid-monitor and a fresh process resumes the canary from the same SQLite file,
+  replaying completed steps instead of redoing them.
 
 ## Layout
 

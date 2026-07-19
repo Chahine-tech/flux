@@ -19,6 +19,8 @@
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@effect/sql-sqlite-node": "catalog:",
+    "tsx": "catalog:"
   }
 }
