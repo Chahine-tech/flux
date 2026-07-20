@@ -120,6 +120,32 @@ describe("control plane HTTP API", () => {
     expect(await second.json()).toMatchObject({ _tag: "ServiceAlreadyDeploying", service: "billing" })
   })
 
+  it("POST /deployments inside an always-open window proceeds (D28)", async () => {
+    const res = await post("/deployments", { ...validTrigger, service: "windowed-open", window: "* * * * *" })
+    expect(res.status).toBe(200)
+  })
+
+  it("POST /deployments outside its window is rejected 422 with the next opening (D28)", async () => {
+    // A window 12 hours off the current hour is guaranteed not to contain now,
+    // whenever the test runs — deterministic without controlling the clock.
+    const notNowHour = (new Date().getUTCHours() + 12) % 24
+    const res = await post("/deployments", {
+      ...validTrigger,
+      service: "windowed-closed",
+      window: `* ${notNowHour} * * *`
+    })
+    expect(res.status).toBe(422)
+    const body = await res.json() as { _tag: string; service: string; nextAllowed: string }
+    expect(body._tag).toBe("OutsideDeploymentWindow")
+    expect(body.service).toBe("windowed-closed")
+    expect(new Date(body.nextAllowed).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it("POST /deployments rejects an invalid cron window with 400 (schema boundary)", async () => {
+    const res = await post("/deployments", { ...validTrigger, service: "bad-window", window: "not a cron" })
+    expect(res.status).toBe(400)
+  })
+
   it("GET /deployments lists deployments", async () => {
     const res = await handler(new Request(url("/deployments")))
     expect(res.status).toBe(200)

@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Identifier, Thresholds } from "@flux/domain"
+import { DeploymentWindow, Identifier, Thresholds } from "@flux/domain"
 
 /**
  * The body of `POST /deployments` — the request that starts a canary.
@@ -30,7 +30,13 @@ export const TriggerDeploymentRequest = Schema.Struct({
   previousVersion: Identifier,
   steps: Schema.NonEmptyArray(DeploymentStep),
   rules: Thresholds,
-  pollIntervalMs: Schema.Finite.check(Schema.isGreaterThan(0))
+  pollIntervalMs: Schema.Finite.check(Schema.isGreaterThan(0)),
+  /**
+   * Optional deploy window as a cron expression (N11/D28). The canary may only
+   * start while `now` is inside it; absent means always allowed. Checked by the
+   * control plane before admission — it never reaches the workflow (D6).
+   */
+  window: Schema.optionalKey(DeploymentWindow)
 })
 export type TriggerDeploymentRequest = typeof TriggerDeploymentRequest.Type
 

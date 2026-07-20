@@ -75,17 +75,30 @@ Choices that go past plumbing:
   Temporal UI read them back. The integration test asserts the stored history
   payload really is `binary/gzip`.
 - A deployment is one trace, not two. Client and activity interceptors carry a
-  W3C `traceparent` through Temporal's own headers — the workflow has to
-  forward it to every activity it schedules itself, Temporal doesn't do that
-  for you — replacing an earlier version that faked a trace root from the
-  workflow's run id. Proven the same way as the codec: the raw history shows
-  the same header on the start event and the first activity's scheduled event.
-- A separate experiment reimplements the same canary — same domain types, same
-  activities — on Effect's own `effect/unstable/workflow` instead of Temporal.
+  W3C `traceparent` through Temporal's own headers. The workflow has to forward
+  it to every activity it schedules itself; Temporal doesn't do that for you.
+  This replaced an earlier version that faked a trace root from the workflow's
+  run id. Proven the same way as the codec: the raw history shows the same
+  header on the start event and the first activity's scheduled event.
+- A separate experiment reimplements the same canary (same domain types, same
+  activities) on Effect's own `effect/unstable/workflow` instead of Temporal.
   It lives in `packages/comparison`, is never imported by the running app, and
   its durability is proven the blunt way: a test SIGKILLs the process
   mid-monitor and a fresh process resumes the canary from the same SQLite file,
-  replaying completed steps instead of redoing them.
+  replaying completed steps instead of redoing them. The full write-up of what
+  each engine buys is in [docs/comparison.md](docs/comparison.md).
+- A deploy can be fenced to a time window: `flux deploy --window "* 9-17 * * 1-5"`
+  refuses to start outside weekday business hours and tells you when the window
+  next opens. The window is a cron expression evaluated by a pure domain
+  function before admission; it never reaches the workflow. (Building it caught
+  that Effect's `Cron` is second-precise, so a range window needs the clock
+  floored to the minute.)
+- The workflow's code has actually evolved once, the way you would in
+  production: a new `started` notification added behind `workflow.patched()`.
+  The committed replay histories prove both directions: old histories replay
+  the old path, and the same edit without the patch guard fails the replay
+  test with a determinism error. The lock also refuses `deprecatePatch` while
+  those histories exist, which is the patch lifecycle doing its job.
 
 ## Layout
 
@@ -145,16 +158,18 @@ budget of two, exactly two admitted). Drift comparison and reconciliation. The
 SQLite projection and its aggregation query. The poller's delta suppression.
 
 **Against a real cluster, in CI.** The time-skipping server implements neither
-worker versioning, nor the tuner's native config, nor Schedules, nor Nexus — so
-a second CI job boots the repo's own compose and proves them for real: a
+worker versioning, nor the tuner's native config, nor Schedules, nor Nexus, so
+a second CI job boots the repo's own compose and proves them for real. A
 versioned worker pins the workflow it ran (the `describe` shows the deployment
-and build id), a worker running the production tuner completes a canary, the
-drift Schedule's create → update-in-place → delete lifecycle holds, and a
-second namespace triggers a canary in a separate platform namespace through a
-registered Nexus endpoint — with no other access to it — and the run completes
-under the workflow id the cross-namespace call actually produced. This tier
-exists because running things for real kept finding bugs the type checker was
-happy with.
+and build id). A worker running the production tuner completes a canary. The
+drift Schedule's create → update-in-place → delete lifecycle holds. A second
+namespace triggers a canary in a separate platform namespace through a
+registered Nexus endpoint, with no other access to it, and the run completes
+under the workflow id the cross-namespace call actually produced. And a worker
+SIGKILLed mid-monitor loses nothing: the server notices the missed heartbeats
+and a fresh worker finishes the canary, replaying the completed steps instead
+of redoing them. This tier exists because running things for real kept finding
+bugs the type checker was happy with.
 
 ---
 

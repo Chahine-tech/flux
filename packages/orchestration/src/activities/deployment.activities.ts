@@ -12,6 +12,15 @@ import type { DeploymentActivities } from "./types.ts"
 /** Services the worker's ManagedRuntime must provide (the 4 ports). */
 export type AppServices = HealthPort | MetricsPort | NotifyPort | RouterPort
 
+/** The deployment's business id (`dep-service-…`), from the activity's Temporal context. */
+const currentDeploymentId = (): string | undefined => {
+  try {
+    return ActivityContext.current().info.workflowExecution?.workflowId
+  } catch {
+    return undefined // not inside an activity (unit tests)
+  }
+}
+
 /**
  * Distributed tracing (D24, replaces N2/voie B): every activity of one
  * deployment shares the trace the CLI/control-plane started, propagated
@@ -19,10 +28,24 @@ export type AppServices = HealthPort | MetricsPort | NotifyPort | RouterPort
  * `../tracing/`). `Effect.withParentSpan` re-parents the use case's own spans
  * onto it. Falls back to no parent when the header is absent (e.g. unit
  * tests, or a client that predates D24).
+ *
+ * The same wrapper also stamps a correlation id onto every log line the use
+ * case emits (D29): `Effect.annotateLogs` — v4's successor to FiberRef for
+ * "a value on every log line without threading it" — carries `flux.deployment`
+ * down the fiber tree, so an activity's logs say which deployment they belong
+ * to for free.
  */
+/** Stamp `flux.deployment` onto every log line the effect emits (D29). Exported for its test. */
+export const withDeploymentLog = <A, E, R>(
+  deploymentId: string | undefined,
+  effect: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> =>
+  deploymentId === undefined ? effect : effect.pipe(Effect.annotateLogs({ "flux.deployment": deploymentId }))
+
 const linkToDeployment = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+  const correlated = withDeploymentLog(currentDeploymentId(), effect)
   const parent = currentActivityTraceParent()
-  return parent === undefined ? effect : effect.pipe(Effect.withParentSpan(parent))
+  return parent === undefined ? correlated : correlated.pipe(Effect.withParentSpan(parent))
 }
 
 const HEARTBEAT_INTERVAL = Duration.seconds(10)

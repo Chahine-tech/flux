@@ -1,4 +1,4 @@
-import { Console, Effect, Schema } from "effect"
+import { Console, Effect, Option, Schema } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { PrometheusMetrics } from "@flux/adapters"
 import type { TriggerDeploymentRequest } from "@flux/contracts"
@@ -24,6 +24,10 @@ export const deploy = Command.make("deploy", {
   monitor: Flag.string("monitor").pipe(
     Flag.withDefault("30s"),
     Flag.withDescription("Monitoring window per canary step")
+  ),
+  window: Flag.string("window").pipe(
+    Flag.optional,
+    Flag.withDescription('Only deploy inside this cron window, e.g. "* 9-17 * * 1-5" (N11/D28)')
   ),
   controlPlane: Flag.string("control-plane").pipe(
     Flag.withDefault("http://localhost:8080"),
@@ -52,7 +56,11 @@ export const deploy = Command.make("deploy", {
     const decoded = yield* Schema.decodeUnknownEffect(DeploymentConfig)(raw)
     const client = yield* makeClient(config.controlPlane)
     // The workflow-facing input is structurally the request; the server revalidates it.
-    const payload = configToInput(decoded) as TriggerDeploymentRequest
+    const window = Option.getOrUndefined(config.window)
+    const payload = {
+      ...configToInput(decoded),
+      ...(window === undefined ? {} : { window })
+    } as TriggerDeploymentRequest
     const { workflowId } = yield* client.deployments.trigger({ payload })
 
     yield* Console.log(
@@ -63,5 +71,7 @@ export const deploy = Command.make("deploy", {
     Effect.catchTag("DeploymentBudgetExhausted", (error) =>
       Console.error(`[flux] rejected: concurrency budget full (limit ${error.limit})`)),
     Effect.catchTag("ServiceAlreadyDeploying", (error) =>
-      Console.error(`[flux] rejected: ${error.service} already has a deployment in flight`))
+      Console.error(`[flux] rejected: ${error.service} already has a deployment in flight`)),
+    Effect.catchTag("OutsideDeploymentWindow", (error) =>
+      Console.error(`[flux] rejected: outside deploy window "${error.window}" — next opens ${error.nextAllowed}`))
   ))

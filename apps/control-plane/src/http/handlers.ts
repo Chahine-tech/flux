@@ -1,6 +1,7 @@
-import { Effect } from "effect"
+import { DateTime, Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { FluxApi } from "@flux/contracts"
+import { FluxApi, OutsideDeploymentWindow } from "@flux/contracts"
+import { evaluateWindow } from "@flux/domain"
 import { AdmissionController } from "../admission.ts"
 import { ReadModel } from "../read-model.ts"
 import { TemporalClient } from "../temporal-client.ts"
@@ -23,9 +24,22 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
       Effect.gen(function*() {
         const admission = yield* AdmissionController
         const temporal = yield* TemporalClient
+        // Temporal gate (D28), before the STM reservation: reject a deploy
+        // outside its window with the next opening time. `window` is
+        // control-plane-only policy — stripped here so it never reaches the
+        // workflow (D6) or its history.
+        const { window, ...input } = payload
+        const decision = evaluateWindow(window, yield* DateTime.nowAsDate)
+        if (decision._tag === "Closed") {
+          return yield* new OutsideDeploymentWindow({
+            service: payload.service,
+            window: window!,
+            nextAllowed: decision.nextAllowed.toISOString()
+          })
+        }
         // Reserve a slot (may reject 429/409); free it again if the start fails.
         yield* admission.admit(payload.service)
-        const workflowId = yield* temporal.start(payload).pipe(
+        const workflowId = yield* temporal.start(input).pipe(
           Effect.onError(() => admission.release(payload.service))
         )
         return { workflowId }

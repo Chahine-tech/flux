@@ -59,6 +59,13 @@ export class ServiceAlreadyDeploying extends Schema.TaggedErrorClass<ServiceAlre
   { httpApiStatus: 409 }
 ) {}
 
+/** The deploy was triggered outside its allowed window (N11/D28); retry after `nextAllowed`. */
+export class OutsideDeploymentWindow extends Schema.TaggedErrorClass<OutsideDeploymentWindow>()(
+  "OutsideDeploymentWindow",
+  { service: Schema.String, window: Schema.String, nextAllowed: Schema.String },
+  { httpApiStatus: 422 }
+) {}
+
 const WorkflowIdParam = { workflowId: Schema.String }
 
 const deployments = HttpApiGroup.make("deployments")
@@ -66,7 +73,7 @@ const deployments = HttpApiGroup.make("deployments")
     HttpApiEndpoint.post("trigger", "/deployments", {
       payload: TriggerDeploymentRequest,
       success: TriggerDeploymentResponse,
-      error: [DeploymentBudgetExhausted, ServiceAlreadyDeploying]
+      error: [DeploymentBudgetExhausted, ServiceAlreadyDeploying, OutsideDeploymentWindow]
     })
   )
   .add(
