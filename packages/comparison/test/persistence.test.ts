@@ -82,16 +82,19 @@ describe("durability (D23): ClusterWorkflowEngine over SQLite", () => {
 
     // Crash-recovery on this engine is storage-poll redelivery, gated by a
     // redelivery lease: a delivered-but-unreplied message only becomes
-    // redeliverable once its `last_read` is older than 10 minutes — a
-    // constant hardcoded in `SqlMessageStorage` (there IS a faster path, the
-    // duplicate `execute` racing shard acquisition, but it is exactly that: a
-    // race — it is what made this test flake ~1/3 on Linux before this
-    // rewind). Ageing `last_read` by 11 minutes compresses wall-clock time
-    // the same way Temporal's time-skipping server does on the other side of
-    // the comparison; the mechanism under proof — a fresh runner picking a
-    // dead runner's execution back up from SQL — is untouched.
+    // redeliverable once its `last_read` is older than 10 minutes, a constant
+    // hardcoded in `SqlMessageStorage`. (There is a faster path, a duplicate
+    // `execute` racing shard acquisition, but it is a race; relying on it made
+    // this test flake on slower CI runners.) Clearing `last_read` to NULL is
+    // exactly how the SDK's own `reset` makes a message redeliverable (it hits
+    // the `last_read IS NULL` branch of the poll query, no date arithmetic, so
+    // it is immune to the timestamp-format/timezone fragility that an earlier
+    // `DATETIME('now','-11 minute')` version quietly depended on). It
+    // compresses wall-clock time the way Temporal's time-skipping server does
+    // on the other side of the comparison; the mechanism under proof, a fresh
+    // runner picking a dead runner's execution back up from SQL, is untouched.
     const db = new DatabaseSync(dbPath)
-    db.exec("UPDATE cluster_messages SET last_read = DATETIME('now', '-11 minute') WHERE last_read IS NOT NULL")
+    db.exec("UPDATE cluster_messages SET last_read = NULL WHERE processed = 0")
     db.close()
 
     // Phase 2: same SQLite file, same payload → same execution id. The fresh
