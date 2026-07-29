@@ -58,7 +58,11 @@ pretending it recovered.
 Choices that go past plumbing:
 
 - Two threshold rules that share a PromQL query hit Prometheus once per poll, not
-  twice, through a `RequestResolver`.
+  twice, through a `RequestResolver`. The metrics port has a second backend for
+  apps without Prometheus: a generic HTTP-JSON adapter that reads a value at a
+  JSON path (`"<url> <path>"`), with the same one-fetch-per-shared-query dedup —
+  the query stays an opaque string the adapter interprets, so nothing above the
+  port changed.
 - Admission control (one deployment per service, plus a global cap) is a single
   STM transaction: a `TxSemaphore` and a `TxHashMap` updated together, so two
   concurrent triggers can't over-admit.
@@ -184,8 +188,11 @@ SQLite projection and its aggregation query. The poller's delta suppression.
 worker versioning, nor the tuner's native config, nor Schedules, nor Nexus, so
 a second CI job boots the repo's own compose and proves them for real. A
 versioned worker pins the workflow it ran (the `describe` shows the deployment
-and build id). A worker running the production tuner completes a canary. The
-drift Schedule's create → update-in-place → delete lifecycle holds. A second
+and build id). A worker running the production tuner completes a canary. A
+worker with autoscaling pollers (the number of open polls tracks the queue
+backlog, no Kubernetes) completes one too, and the queue's backlog is read back
+over the raw `DescribeTaskQueue` gRPC. The drift Schedule's create →
+update-in-place → delete lifecycle holds. A second
 namespace triggers a canary in a separate platform namespace through a
 registered Nexus endpoint, with no other access to it, and the run completes
 under the workflow id the cross-namespace call actually produced. And a worker

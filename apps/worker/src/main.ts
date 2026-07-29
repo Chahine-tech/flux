@@ -6,7 +6,7 @@ import type { ManagedRuntime } from "effect"
 import type { AppServices } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
 import { ensureSearchAttributes } from "./search-attributes.ts"
-import { tuner, versioningOptions } from "./worker-config.ts"
+import { pollerBehaviors, tuner, versioningOptions } from "./worker-config.ts"
 
 /**
  * flux worker — Temporal process.
@@ -61,11 +61,31 @@ const main = async (): Promise<void> => {
         workflowModules: [fileURLToPath(import.meta.resolve("@flux/orchestration/tracing/workflow-interceptors"))]
       },
       tuner,
+      // Poller autoscaling (D34): the number of open polls tracks the queue
+      // backlog between the configured min/max, so idle workers stay cheap and a
+      // burst of deployments scales up — no Kubernetes, no fixed poll count to guess.
+      ...pollerBehaviors(),
       ...(workerDeploymentOptions ? { workerDeploymentOptions } : {})
     })
 
+    // Log the worker's live load periodically so the autoscaling is observable
+    // (poller state + in-flight work). D34.
+    const statusIntervalMs = Number(process.env.WORKER_STATUS_INTERVAL_MS ?? 30_000)
+    const statusInterval = setInterval(() => {
+      const status = worker.getStatus()
+      console.log(
+        `[flux] worker load — wf poller: ${status.workflowPollerState}, act poller: ${status.activityPollerState}, ` +
+          `in-flight wf: ${status.numInFlightWorkflowActivations}, act: ${status.numInFlightActivities}, ` +
+          `cached wf: ${status.numCachedWorkflows}`
+      )
+    }, statusIntervalMs)
+
     console.log(`[flux] worker listening on task queue "${TASK_QUEUE}"`)
-    await worker.run()
+    try {
+      await worker.run()
+    } finally {
+      clearInterval(statusInterval)
+    }
   } finally {
     metricsServer.close()
     await runtime.dispose()

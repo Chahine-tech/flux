@@ -19,7 +19,12 @@ const temporal = Config.all({
 }).pipe(Config.nested("temporal"))
 
 const metrics = Config.all({
-  prometheusUrl: Config.string("prometheus_url").pipe(Config.withDefault("http://localhost:9090"))
+  // Which MetricsPort adapter backs monitoring (D33): "prometheus" (default) or
+  // "http-json" for apps exposing a plain JSON metrics endpoint.
+  type: Config.string("type").pipe(Config.withDefault("prometheus")),
+  prometheusUrl: Config.string("prometheus_url").pipe(Config.withDefault("http://localhost:9090")),
+  // Optional bearer token for the http-json backend's endpoints.
+  httpJsonToken: Config.redacted("http_json_token").pipe(Config.withDefault(Redacted.make("")))
 }).pipe(Config.nested("metrics"))
 
 const router = Config.all({

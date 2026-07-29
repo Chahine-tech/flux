@@ -13,7 +13,10 @@ namespace = "default"
 task_queue = "flux-deployments"
 
 [metrics]
+type = "prometheus"          # prometheus | http-json (D33)
 prometheus_url = "http://localhost:9090"
+# http-json backend: rule queries are "<url> <json-path>" (e.g. "http://svc/metrics data.error_rate").
+# http_json_token = "..."     # optional bearer, or env METRICS_HTTP_JSON_TOKEN
 
 [thresholds]
 max_error_rate = 0.01       # 1%

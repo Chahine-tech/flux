@@ -10,6 +10,7 @@
 export * as AnthropicLanguageModel from "./ai/anthropic-language-model.ts"
 export * as GitHubChangelog from "./changelog/github.ts"
 export * as HttpHealth from "./health/http.ts"
+export * as HttpJsonMetrics from "./metrics/http-json.ts"
 export * as PrometheusMetrics from "./metrics/prometheus.ts"
 export * as SlackNotify from "./notify/slack.ts"
 export * as CaddyRouter from "./router/caddy.ts"

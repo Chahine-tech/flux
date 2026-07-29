@@ -41,3 +41,32 @@ export const tuner: WorkerTuner = {
   activityTaskSlotOptions: { minimumSlots: 1, maximumSlots: 200, rampThrottle: "50ms" },
   localActivityTaskSlotOptions: { minimumSlots: 2, maximumSlots: 500, rampThrottle: "0ms" }
 }
+
+/**
+ * Poller autoscaling (N16/D34): the SDK grows and shrinks the number of open
+ * poll calls between `minimum` and `maximum` based on the server's backlog
+ * feedback — a quiet queue holds a single poller, a burst of concurrent
+ * deployments scales up, all within one process. This is Temporal's own answer
+ * to "scale to load without Kubernetes"; it needs server >= 1.28.0 (the compose
+ * runs 1.29.x). It is orthogonal to and composes with the resource `tuner`:
+ * poller behavior decides how many tasks the worker *asks* for, the tuner how
+ * many task *slots* those tasks may occupy. Exported so the real-cluster proof
+ * runs the exact production values.
+ */
+export const pollerBehaviors = (env: NodeJS.ProcessEnv = process.env) => {
+  const autoscaling = (minimum: number, maximum: number) => ({
+    type: "autoscaling" as const,
+    minimum,
+    maximum
+  })
+  return {
+    workflowTaskPollerBehavior: autoscaling(
+      Number(env.WORKER_WF_POLLERS_MIN ?? 1),
+      Number(env.WORKER_WF_POLLERS_MAX ?? 10)
+    ),
+    activityTaskPollerBehavior: autoscaling(
+      Number(env.WORKER_ACT_POLLERS_MIN ?? 1),
+      Number(env.WORKER_ACT_POLLERS_MAX ?? 20)
+    )
+  }
+}

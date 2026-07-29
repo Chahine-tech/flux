@@ -6,6 +6,7 @@ import {
   CaddyRouter,
   GitHubChangelog,
   HttpHealth,
+  HttpJsonMetrics,
   NginxRouter,
   PrometheusMetrics,
   SlackNotify
@@ -49,6 +50,18 @@ const backendAddress = (service: string, version: string): string => `${service}
 const versionOfDial = (service: string, dial: string): string | undefined =>
   dial.startsWith(`${service}-`) ? dial.slice(service.length + 1).replace(/:\d+$/, "") : undefined
 
+/** Select the MetricsPort adapter the config asks for (D33). */
+const metricsLayer = (config: FluxConfig) => {
+  switch (config.metrics.type) {
+    case "prometheus":
+      return PrometheusMetrics.layer({ url: config.metrics.prometheusUrl })
+    case "http-json":
+      return HttpJsonMetrics.layer({ authToken: config.metrics.httpJsonToken })
+    default:
+      throw new Error(`metrics.type "${config.metrics.type}" is not implemented — use "prometheus" or "http-json"`)
+  }
+}
+
 /** Select the RouterPort adapter the config asks for (D20). */
 const routerLayer = (config: FluxConfig) => {
   switch (config.router.type) {
@@ -78,7 +91,7 @@ const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
     const config = yield* Effect.orDie(fluxConfig)
 
     return Layer.mergeAll(
-      PrometheusMetrics.layer({ url: config.metrics.prometheusUrl }),
+      metricsLayer(config),
       HttpHealth.layer({
         // Default targets a `service-version` host — the compose / N0-e2e
         // topology where each version is its own container. HEALTH_URL overrides

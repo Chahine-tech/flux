@@ -1,10 +1,10 @@
 import { fileURLToPath } from "node:url"
 import { Client, Connection } from "@temporalio/client"
 import { bundleWorkflowCode, NativeConnection, Worker } from "@temporalio/worker"
-import type { DeploymentActivities, DeploymentInput, DeploymentResult } from "@flux/orchestration"
+import { type DeploymentActivities, type DeploymentInput, type DeploymentResult, taskQueueBacklog } from "@flux/orchestration"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { ensureSearchAttributes } from "../src/search-attributes.ts"
-import { tuner, versioningOptions } from "../src/worker-config.ts"
+import { pollerBehaviors, tuner, versioningOptions } from "../src/worker-config.ts"
 
 /**
  * Real-cluster proofs (D19): the capabilities the time-skipping test server
@@ -77,6 +77,36 @@ describe.skipIf(!REAL)("real cluster (D19)", () => {
         args: [quickCanary("api")]
       })
     ) as DeploymentResult
+    expect(result.kind).toBe("Succeeded")
+  })
+
+  it("poller autoscaling: an autoscaling-poller worker completes a canary, and the backlog is introspectable (D34)", async () => {
+    const taskQueue = `flux-real-pollers-${Date.now()}`
+    const worker = await Worker.create({
+      connection,
+      namespace,
+      taskQueue,
+      workflowBundle,
+      activities: okActivities(),
+      tuner,
+      ...pollerBehaviors() // the exact production autoscaling values
+    })
+    const result = await worker.runUntil(async () => {
+      const outcome = await client.workflow.execute("deploymentWorkflow", {
+        taskQueue,
+        workflowId: `real-pollers-${Date.now()}`,
+        args: [quickCanary("api")]
+      }) as DeploymentResult
+
+      // The D34 introspection surface reads the queue's backlog + pollers over
+      // the raw DescribeTaskQueue gRPC — proving the call shape against a real
+      // server (the time-skipping test server can't report queue stats).
+      const backlog = await taskQueueBacklog(client.connection.workflowService, { namespace, taskQueue })
+      expect(typeof backlog.backlogCount).toBe("number")
+      expect(backlog.backlogCount).toBeGreaterThanOrEqual(0)
+      expect(backlog.pollerCount).toBeGreaterThanOrEqual(0)
+      return outcome
+    })
     expect(result.kind).toBe("Succeeded")
   })
 
