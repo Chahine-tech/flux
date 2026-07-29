@@ -18,6 +18,7 @@ export * from "./metrics.ts"
 // `@flux/orchestration/nexus` instead (same pattern as the workflow
 // interceptors subpath).
 export * from "./payload-codec.ts"
+export * from "./task-queue.ts"
 export * from "./tracing/activity-interceptor.ts"
 export * from "./tracing/client-interceptor.ts"
 export * from "./tracing/traceparent.ts"
