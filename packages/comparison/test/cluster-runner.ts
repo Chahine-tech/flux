@@ -1,4 +1,5 @@
 import { appendFileSync } from "node:fs"
+import { NodeCrypto } from "@effect/platform-node"
 import { SqliteClient } from "@effect/sql-sqlite-node"
 import { Duration, Effect, Layer } from "effect"
 import { HealthPort, MetricsPort, NotifyPort, RouterPort } from "@flux/application"
@@ -75,7 +76,12 @@ const payload = {
 const program = Effect.gen(function*() {
   const result = yield* DeploymentWorkflow.execute(payload)
   console.log(`RESULT:${JSON.stringify(result)}`)
-}).pipe(Effect.provide(MainLive))
+}).pipe(
+  Effect.provide(MainLive),
+  // effect beta.102 surfaced a `Crypto` requirement in the cluster engine
+  // (execution-id generation); Node provides the implementation.
+  Effect.provide(NodeCrypto.layer)
+)
 
 Effect.runPromise(program).then(
   () => process.exit(0),

@@ -203,5 +203,5 @@ bugs the type checker was happy with.
 
 ---
 
-*Effect is pinned to an exact beta (`4.0.0-beta.97`); upgrades are deliberate.
+*Effect is pinned to an exact beta (`4.0.0-beta.102`); upgrades are deliberate.
 MIT licensed.*

@@ -7,14 +7,14 @@ settings:
 catalogs:
   default:
     '@effect/platform-node':
-      specifier: 4.0.0-beta.97
-      version: 4.0.0-beta.97
+      specifier: 4.0.0-beta.102
+      version: 4.0.0-beta.102
     '@effect/sql-sqlite-node':
-      specifier: 4.0.0-beta.97
-      version: 4.0.0-beta.97
+      specifier: 4.0.0-beta.102
+      version: 4.0.0-beta.102
     '@effect/vitest':
-      specifier: 4.0.0-beta.97
-      version: 4.0.0-beta.97
+      specifier: 4.0.0-beta.102
+      version: 4.0.0-beta.102
     '@temporalio/activity':
       specifier: ^1.21.1
       version: 1.21.1
@@ -40,8 +40,8 @@ catalogs:
       specifier: ^24.13.3
       version: 24.13.3
     effect:
-      specifier: 4.0.0-beta.97
-      version: 4.0.0-beta.97
+      specifier: 4.0.0-beta.102
+      version: 4.0.0-beta.102
     nexus-rpc:
       specifier: ^0.0.2
       version: 0.0.2
@@ -76,7 +76,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(ioredis@5.11.1)
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(ioredis@5.11.1)
       '@flux/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
@@ -97,7 +97,7 @@ importers:
         version: 1.21.1
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -119,10 +119,10 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(ioredis@5.11.1)
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(ioredis@5.11.1)
       '@effect/sql-sqlite-node':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)
       '@flux/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -140,11 +140,11 @@ importers:
         version: 1.21.1
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@temporalio/testing':
         specifier: 'catalog:'
         version: 1.21.1(esbuild@0.28.1)(tslib@2.8.1)
@@ -168,7 +168,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(ioredis@5.11.1)
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(ioredis@5.11.1)
       '@flux/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
@@ -192,7 +192,7 @@ importers:
         version: 1.21.1(esbuild@0.28.1)(tslib@2.8.1)
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
     devDependencies:
       '@temporalio/activity':
         specifier: 'catalog:'
@@ -217,7 +217,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(ioredis@5.11.1)
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(ioredis@5.11.1)
       '@flux/application':
         specifier: workspace:*
         version: link:../application
@@ -226,11 +226,11 @@ importers:
         version: link:../domain
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -248,11 +248,11 @@ importers:
         version: link:../domain
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -273,14 +273,17 @@ importers:
         version: link:../domain
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(ioredis@5.11.1)
       '@effect/sql-sqlite-node':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -298,14 +301,14 @@ importers:
     dependencies:
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
       toml:
         specifier: ^4.1.2
         version: 4.1.2
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -323,11 +326,11 @@ importers:
         version: link:../domain
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -342,11 +345,11 @@ importers:
     dependencies:
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -385,14 +388,14 @@ importers:
         version: 1.21.1
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.97
+        version: 4.0.0-beta.102
       nexus-rpc:
         specifier: 'catalog:'
         version: 0.0.2
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
+        version: 4.0.0-beta.102(effect@4.0.0-beta.102)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@temporalio/testing':
         specifier: 'catalog:'
         version: 1.21.1(esbuild@0.28.1)(tslib@2.8.1)
@@ -412,28 +415,28 @@ packages:
     resolution: {integrity: sha512-uwXbp+lWzt60bZnm6lG6S5DWy0m6TthUzV2hcQoiS6NzieEDm07tuBakscxOXoO+AU9+yTH+0TSIa9mEDt9dFA==}
     hasBin: true
 
-  '@effect/platform-node-shared@4.0.0-beta.97':
-    resolution: {integrity: sha512-sAlygOlDLLERk7fC24f7Aa4G3wkEbGyyMEileHTHU2fThiPYSGMqNRK1LLnNr17m2+JR7BHbycwXkJkM18BAQw==}
+  '@effect/platform-node-shared@4.0.0-beta.102':
+    resolution: {integrity: sha512-gVd793I72MrkX4dXo7eYtRKfNj0RW4eMRfVEKEJI16h2+mBDCzQ+gqMrog2hSTHQnaIbvbYShNQ4TVGuRCYZeQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.97
+      effect: ^4.0.0-beta.102
 
-  '@effect/platform-node@4.0.0-beta.97':
-    resolution: {integrity: sha512-Vd40VLh+Y08Bs37KWtbe9AgO2+t3RKZKGX9YC6ZKAcswu4tXR3CwSI7V2MN+GgS+ez/GLmqH1WrzDDlaIAxKPA==}
+  '@effect/platform-node@4.0.0-beta.102':
+    resolution: {integrity: sha512-wYVAU9jAePT+gouMr/EVz1CaW6yDLjPAgXYeEFLz7wugT5iZhFRag6mqajV/wwN3bzWP2fzZHokLuPmqD/rqeA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.97
+      effect: ^4.0.0-beta.102
       ioredis: ^5.7.0
 
-  '@effect/sql-sqlite-node@4.0.0-beta.97':
-    resolution: {integrity: sha512-mzP67KmXK2vGU3GrlOdM0TWST7mWI8kMNqPu7Gl2I30eSv+DmBes1qYVIQWUnE3b5ka2LCP7iFzjxNjtIfqn8g==}
+  '@effect/sql-sqlite-node@4.0.0-beta.102':
+    resolution: {integrity: sha512-MtHf58b33hP8t5wJ9SrQCoLwIWQntxtFdcAN3aSLTSczBgKk+d/BPGfyv6iIgDkWWyMKHOYrJ29C7vprgjqeyA==}
     peerDependencies:
-      effect: ^4.0.0-beta.97
+      effect: ^4.0.0-beta.102
 
-  '@effect/vitest@4.0.0-beta.97':
-    resolution: {integrity: sha512-1dH6LBWSZyqnTV7ZO+yIpPGPf/xd7RtFfvQ4ZpTy9elzFN+wr1YBFpHSCr8+BfXOml6b8g9Mtj5eDy1qjbizUA==}
+  '@effect/vitest@4.0.0-beta.102':
+    resolution: {integrity: sha512-4dipFAYG6imOzrY3zy3BgzCJkbb9xESyzUef0WSx8bsK0/SpITqbJpdwKeOyDWLZ+rimjua8IbTFMAde865pIQ==}
     peerDependencies:
-      effect: ^4.0.0-beta.97
+      effect: ^4.0.0-beta.102
       vitest: ^3.0.0 || ^4.0.0
 
   '@emnapi/core@1.11.1':
@@ -1555,8 +1558,8 @@ packages:
       oxc-resolver:
         optional: true
 
-  effect@4.0.0-beta.97:
-    resolution: {integrity: sha512-pK03HpQVxGZOWdwDAy/iwvV8u3KYcUf2mOWyWqaut2zau8V2u6ejWP7b4BELjyUIiZWW1fl/s/VJpgZUcTjThg==}
+  effect@4.0.0-beta.102:
+    resolution: {integrity: sha512-z8Y+Q76Hh/kjLFZrXu8tGn6e+tDsg45R+UHhxd190pXxD53OGwf/G/zDxXTkse4HJ5mobNZfitLfUCp4fMvu6w==}
 
   electron-to-chromium@1.5.389:
     resolution: {integrity: sha512-cEto7aeOqBfU1D+c5py5pE+ooscKE75JifxLBdFUZsqAxRS6y7kebtxAZvICszSl05gPjYHDTjY+lXpyGvpJbg==}
@@ -2310,19 +2313,19 @@ snapshots:
 
   '@effect/language-service@0.86.6': {}
 
-  '@effect/platform-node-shared@4.0.0-beta.97(effect@4.0.0-beta.97)':
+  '@effect/platform-node-shared@4.0.0-beta.102(effect@4.0.0-beta.102)':
     dependencies:
       '@types/ws': 8.18.1
-      effect: 4.0.0-beta.97
+      effect: 4.0.0-beta.102
       ws: 8.21.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.0.0-beta.97(effect@4.0.0-beta.97)(ioredis@5.11.1)':
+  '@effect/platform-node@4.0.0-beta.102(effect@4.0.0-beta.102)(ioredis@5.11.1)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0-beta.97(effect@4.0.0-beta.97)
-      effect: 4.0.0-beta.97
+      '@effect/platform-node-shared': 4.0.0-beta.102(effect@4.0.0-beta.102)
+      effect: 4.0.0-beta.102
       ioredis: 5.11.1
       mime: 4.1.0
       undici: 8.7.0
@@ -2330,13 +2333,13 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@effect/sql-sqlite-node@4.0.0-beta.97(effect@4.0.0-beta.97)':
+  '@effect/sql-sqlite-node@4.0.0-beta.102(effect@4.0.0-beta.102)':
     dependencies:
-      effect: 4.0.0-beta.97
+      effect: 4.0.0-beta.102
 
-  '@effect/vitest@4.0.0-beta.97(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))':
+  '@effect/vitest@4.0.0-beta.102(effect@4.0.0-beta.102)(vitest@4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0)))':
     dependencies:
-      effect: 4.0.0-beta.97
+      effect: 4.0.0-beta.102
       vitest: 4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0))
 
   '@emnapi/core@1.11.1':
@@ -3251,7 +3254,7 @@ snapshots:
 
   dts-resolver@3.0.0: {}
 
-  effect@4.0.0-beta.97:
+  effect@4.0.0-beta.102:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.9.0

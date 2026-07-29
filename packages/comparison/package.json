@@ -20,6 +20,7 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-node": "catalog:",
     "tsx": "catalog:"
   }
