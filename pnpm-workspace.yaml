@@ -16,13 +16,13 @@ catalog:
   "@effect/sql-sqlite-node": 4.0.0-beta.97
   "@effect/vitest": 4.0.0-beta.97
   "@effect/opentelemetry": 4.0.0-beta.97
-  "@temporalio/activity": ^1.20.2
-  "@temporalio/client": ^1.20.2
-  "@temporalio/common": ^1.20.2
-  "@temporalio/nexus": ^1.20.2
-  "@temporalio/testing": ^1.20.2
-  "@temporalio/worker": ^1.20.2
-  "@temporalio/workflow": ^1.20.2
+  "@temporalio/activity": ^1.21.1
+  "@temporalio/client": ^1.21.1
+  "@temporalio/common": ^1.21.1
+  "@temporalio/nexus": ^1.21.1
+  "@temporalio/testing": ^1.21.1
+  "@temporalio/worker": ^1.21.1
+  "@temporalio/workflow": ^1.21.1
   "nexus-rpc": ^0.0.2
   "@types/node": ^24.13.3
   typescript: ^7.0.2
