@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest"
 import { makePayloadCodec } from "../src/payload-codec.ts"
 
 /**
- * The determinism lock (D22): every history committed under `histories/` is
+ * The determinism lock: every history committed under `histories/` is
  * replayed against the current workflow code. A change that diverges from what
  * a past run recorded — the change that would break in-flight workflows in
  * production — fails here as a `DeterminismViolationError`, in the hermetic CI
@@ -18,7 +18,7 @@ import { makePayloadCodec } from "../src/payload-codec.ts"
 const workflowsPath = fileURLToPath(new URL("../src/workflows/index.ts", import.meta.url))
 const historiesDir = fileURLToPath(new URL("./histories/", import.meta.url))
 
-// The fixtures were captured with the D21 codec on, so replay needs it too:
+// The fixtures were captured with the codec on, so replay needs it too:
 // a gzipped history replaying green is also proof the codec is symmetric.
 const dataConverter = { payloadCodecs: [makePayloadCodec()] }
 
@@ -30,7 +30,7 @@ beforeAll(async () => {
   workflowBundle = await bundleWorkflowCode({ workflowsPath })
 }, 60_000)
 
-describe("replay determinism lock (D22)", () => {
+describe("replay determinism lock", () => {
   it("has the two committed scenarios", () => {
     expect(fixtures).toContain("promotion.json")
     expect(fixtures).toContain("rollback.json")

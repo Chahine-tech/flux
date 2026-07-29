@@ -5,7 +5,7 @@ import type { deploymentWorkflow } from "../workflows/deployment.workflow.ts"
 import { DeployService } from "./service.ts"
 
 /**
- * Worker-side half of D25: the operation is backed by the existing
+ * Worker-side half: the operation is backed by the existing
  * `deploymentWorkflow` — no new workflow logic, the platform namespace runs
  * exactly the same canary any direct caller would trigger. `startWorkflow`
  * defaults to the current worker's task queue (the one polling Nexus tasks),
@@ -24,7 +24,7 @@ export const DeployServiceHandler = serviceHandler(DeployService, {
       // workflow but crashed before replying gets re-invoked, and a
       // `Date.now()` here would start a SECOND canary for the same
       // deployment). Same key shape as the comparison package's
-      // `idempotencyKey` (D23) — the two engines agree on what identifies a
+      // `idempotencyKey` — the two engines agree on what identifies a
       // deployment. A re-deploy of the same service+version after completion
       // is still allowed (default workflow-id reuse policy); one while it is
       // already running is rejected, which is admission control behaving.

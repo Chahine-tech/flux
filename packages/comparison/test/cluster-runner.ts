@@ -8,8 +8,8 @@ import { ClusterWorkflowEngine, SingleRunner } from "effect/unstable/cluster"
 import { DeploymentWorkflow, DeploymentWorkflowLive } from "../src/workflow.ts"
 
 /**
- * Child process for the D23 durability proof — the Effect-side equivalent of
- * what D19's real-cluster CI proves for Temporal. Runs the canary on the
+ * Child process for the durability proof — the Effect-side equivalent of
+ * what the real-cluster CI proves for Temporal. Runs the canary on the
  * durable `ClusterWorkflowEngine` over a SQLite file whose path the test
  * controls. The test SIGKILLs this process mid-monitor, then starts it again
  * on the same file: the same payload derives the same execution id, so the

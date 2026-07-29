@@ -4,10 +4,10 @@ import { Tracer } from "effect"
 import { decodeHeaderPayload, parseTraceparent, TRACEPARENT_HEADER_KEY } from "./traceparent.ts"
 
 /**
- * Worker-side half of D24: decodes the `traceparent` header (forwarded by
+ * Worker-side half: decodes the `traceparent` header (forwarded by
  * `workflow-interceptors.ts`) and makes it available to the activity body as
  * an `Effect.ExternalSpan`, replacing the old runId-derived synthetic root
- * (voie B, N2) with the client's real trace.
+ * with the client's real trace.
  */
 const storage = new AsyncLocalStorage<Tracer.ExternalSpan | undefined>()
 

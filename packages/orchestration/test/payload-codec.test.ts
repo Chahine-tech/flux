@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { DEFAULT_THRESHOLD_BYTES, makePayloadCodec } from "../src/payload-codec.ts"
 
 /**
- * The compression codec (D21), unit level: threshold behaviour, symmetric
+ * The compression codec, unit level: threshold behaviour, symmetric
  * round-trip including the original `encoding` metadata, and pass-through of
  * payloads it does not own. The end-to-end proof (a canary whose input is
  * stored gzipped in Temporal's history) lives in the worker integration test.

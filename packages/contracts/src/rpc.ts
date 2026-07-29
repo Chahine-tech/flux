@@ -4,7 +4,7 @@ import { DeploymentState } from "./deployment.ts"
 
 /**
  * The real-time RPC contract, shared by the control plane (server) and the CLI
- * (client), just like `FluxApi` for the request/response side (N3).
+ * (client), just like `FluxApi` for the request/response side.
  *
  * `WatchDeployment` is a *streaming* RPC: one call yields a `Stream` of the
  * deployment's states — its current state, then every change — carried over a

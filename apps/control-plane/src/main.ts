@@ -9,7 +9,7 @@ import * as ReadModel from "./read-model.ts"
 import * as TemporalClient from "./temporal-client.ts"
 
 /**
- * flux control plane — HTTP server + real-time events (level N3).
+ * flux control plane — HTTP server + real-time events.
  *
  * Composition root: read config, open the Temporal connection (scoped), and
  * launch the HTTP server. `Layer.launch` keeps the process alive until the

@@ -3,7 +3,7 @@ import { RpcClient, RpcSerialization } from "effect/unstable/rpc"
 import { Socket } from "effect/unstable/socket"
 
 /**
- * Client transport for the control plane's streaming RPC (N3.5).
+ * Client transport for the control plane's streaming RPC.
  *
  * `flux status --watch` opens a websocket to the control plane's `/rpc` endpoint
  * and consumes `WatchDeployment` as a `Stream`. The serialization (`layerJson`)

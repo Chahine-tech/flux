@@ -51,17 +51,17 @@ const main = async (): Promise<void> => {
       taskQueue: TASK_QUEUE,
       workflowsPath: fileURLToPath(import.meta.resolve("@flux/orchestration/workflows")),
       activities: createActivities(runtime),
-      // Large payloads are gzip-compressed on the wire and in history (D21).
+      // Large payloads are gzip-compressed on the wire and in history.
       // The codec runs here on the main thread, never inside the workflow VM.
       dataConverter: { payloadCodecs: [makePayloadCodec()] },
-      // One trace end to end (D24): the workflow-side hop is a bundled module
-      // (Effect-free, D6-safe); the activity-side hop reads it back here.
+      // One trace end to end: the workflow-side hop is a bundled module
+      // (Effect-free); the activity-side hop reads it back here.
       interceptors: {
         activity: [activityInterceptors],
         workflowModules: [fileURLToPath(import.meta.resolve("@flux/orchestration/tracing/workflow-interceptors"))]
       },
       tuner,
-      // Poller autoscaling (D34): the number of open polls tracks the queue
+      // Poller autoscaling: the number of open polls tracks the queue
       // backlog between the configured min/max, so idle workers stay cheap and a
       // burst of deployments scales up — no Kubernetes, no fixed poll count to guess.
       ...pollerBehaviors(),
@@ -69,7 +69,7 @@ const main = async (): Promise<void> => {
     })
 
     // Log the worker's live load periodically so the autoscaling is observable
-    // (poller state + in-flight work). D34.
+    // (poller state + in-flight work).
     const statusIntervalMs = Number(process.env.WORKER_STATUS_INTERVAL_MS ?? 30_000)
     const statusInterval = setInterval(() => {
       const status = worker.getStatus()

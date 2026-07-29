@@ -50,7 +50,7 @@ const backendAddress = (service: string, version: string): string => `${service}
 const versionOfDial = (service: string, dial: string): string | undefined =>
   dial.startsWith(`${service}-`) ? dial.slice(service.length + 1).replace(/:\d+$/, "") : undefined
 
-/** Select the MetricsPort adapter the config asks for (D33). */
+/** Select the MetricsPort adapter the config asks for. */
 const metricsLayer = (config: FluxConfig) => {
   switch (config.metrics.type) {
     case "prometheus":
@@ -62,7 +62,7 @@ const metricsLayer = (config: FluxConfig) => {
   }
 }
 
-/** Select the RouterPort adapter the config asks for (D20). */
+/** Select the RouterPort adapter the config asks for. */
 const routerLayer = (config: FluxConfig) => {
   switch (config.router.type) {
     case "nginx":
@@ -93,8 +93,7 @@ const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
     return Layer.mergeAll(
       metricsLayer(config),
       HttpHealth.layer({
-        // Default targets a `service-version` host — the compose / N0-e2e
-        // topology where each version is its own container. HEALTH_URL overrides
+        // Default targets a `service-version` host — the compose         // topology where each version is its own container. HEALTH_URL overrides
         // it with a fixed URL, used by the local demo where the worker runs on
         // the host and probes a single stand-in target.
         url: process.env.HEALTH_URL
@@ -104,7 +103,7 @@ const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
       SlackNotify.layer({
         webhookUrl: Option.getOrElse(config.notifications.slackWebhook, () => Redacted.make(""))
       }),
-      // The LanguageModel port (D30) for the rollback postmortem. An empty key
+      // The LanguageModel port for the rollback postmortem. An empty key
       // (the default) makes it no-op without a network call.
       AnthropicLanguageModel.layer({
         apiKey: config.ai.anthropicApiKey,

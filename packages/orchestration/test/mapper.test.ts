@@ -39,7 +39,7 @@ describe("configToInput", () => {
     expect(canarySteps(configToInput(config))[0]?.approvalTimeoutMs).toBeUndefined()
   })
 
-  it("maps a blue-green strategy, converting the bake shorthand (D32)", () => {
+  it("maps a blue-green strategy, converting the bake shorthand", () => {
     const bgConfig = Schema.decodeUnknownSync(DeploymentConfig)({
       service: "api",
       version: "v2.1.0",

@@ -11,7 +11,7 @@ import { ensureSearchAttributes } from "../src/search-attributes.ts"
 import { activities } from "./worker-doubles.ts"
 
 /**
- * D27: the worker-SIGKILL resume proof, Temporal side — the symmetric twin of
+ * The worker-SIGKILL resume proof, Temporal side — the symmetric twin of
  * the comparison package's `persistence.test.ts`. The comparison document was
  * asserting Temporal's crash recovery on the server's word; this proves it in
  * this repo: a worker dies mid-monitor (kill -9), the server notices through
@@ -20,7 +20,7 @@ import { activities } from "./worker-doubles.ts"
  * replaying the already-completed traffic shift from history instead of
  * re-executing it.
  *
- * Real-cluster gated (D19 pattern): the crash-recovery machinery under proof
+ * Real-cluster gated: the crash-recovery machinery under proof
  * is the server's, which the time-skipping test server does not exercise.
  */
 const REAL = process.env.FLUX_REAL_TEMPORAL === "1"
@@ -59,7 +59,7 @@ const waitFor = async (predicate: () => boolean, timeoutMs: number, what: string
   }
 }
 
-describe.skipIf(!REAL)("worker crash recovery (D27)", () => {
+describe.skipIf(!REAL)("worker crash recovery", () => {
   it("a SIGKILLed worker's canary completes on a fresh worker, without redoing finished activities", async () => {
     const dir = mkdtempSync(join(tmpdir(), "flux-worker-kill-"))
     dirs.push(dir)

@@ -3,7 +3,7 @@ import type { DeploymentActivities } from "../activities/types.ts"
 import type { DriftCheckInput, DriftReport, RouteWeight } from "../deployment-input.ts"
 
 /**
- * Drift detection (N4/D17) — deterministic, no Effect.
+ * Drift detection — deterministic, no Effect.
  *
  * Reads the routing actually in effect for a service and compares it to the
  * desired weights. If they differ, it optionally reconciles by re-applying the

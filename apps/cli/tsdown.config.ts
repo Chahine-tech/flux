@@ -1,7 +1,7 @@
 import { defineConfig } from "tsdown"
 
 /**
- * Package the CLI into a distributable binary (N4/D4 matured). The whole
+ * Package the CLI into a distributable binary. The whole
  * monorepo runs from TypeScript source via tsx; here tsdown (rolldown/oxc)
  * produces a real ESM build: the workspace packages (`@flux/*`) and Effect are
  * bundled into one file with a shebang. Only Temporal's client stays external —

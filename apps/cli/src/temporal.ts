@@ -25,7 +25,7 @@ const withClient = async <A>(use: (client: Client) => Promise<A>): Promise<A> =>
       new Client({
         connection,
         namespace: namespace(),
-        // Symmetric with the worker (D21): history payloads may be gzipped.
+        // Symmetric with the worker: history payloads may be gzipped.
         dataConverter: { payloadCodecs: [makePayloadCodec()] },
         interceptors: { workflow: [traceparentClientInterceptor] }
       })

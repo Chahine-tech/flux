@@ -29,13 +29,13 @@ import {
 /**
  * Canary deployment workflow — deterministic, plain TypeScript, ZERO Effect.
  *
- * Rollback is a saga (N2): the first traffic shift registers a compensation
+ * Rollback is a saga: the first traffic shift registers a compensation
  * that restores the previous version. Every non-success termination — a
  * threshold breach, an abort, or an unexpected failure — runs the compensation
  * stack, so traffic is never left stranded on a bad version. approve/abort are
  * validated Updates; progress is exposed through the `status` query.
  *
- * Activity shapes (N4, D16): the health check is a **local activity** (a quick
+ * Activity shapes: the health check is a **local activity** (a quick
  * call, no task-queue round-trip); monitoring is a regular activity that
  * **heartbeats** and runs inside a **CancellationScope**, so an abort cancels
  * the in-flight monitor immediately instead of waiting for it to finish.
@@ -62,7 +62,7 @@ const localActs = proxyLocalActivities<Pick<DeploymentActivities, "healthCheck">
   retry: { maximumAttempts: 3 }
 })
 
-// The rollback postmortem (D30) is best-effort colour on top of a completed
+// The rollback postmortem is best-effort colour on top of a completed
 // rollback: a short deadline and a single attempt so a slow or absent LLM can
 // never stretch out the rollback path.
 const postmortemActs = proxyActivities<Pick<DeploymentActivities, "postmortem">>({
@@ -94,14 +94,14 @@ const asApplicationFailure = (error: unknown): ApplicationFailure | undefined =>
 }
 
 export async function deploymentWorkflow(input: DeploymentInput): Promise<DeploymentResult> {
-  // Normalize the strategy (D32). Histories recorded before D32 carry a top-level
+  // Normalize the strategy. Older histories carry a top-level
   // `steps` array and no `strategy`, so they fall back to `canary` with those
   // steps and replay through the identical command sequence — no `patched()`
   // needed, because the path is selected by input data, not by a code change for
   // the same input.
   const strategy: DeploymentStrategy = input.strategy ?? { kind: "canary", steps: input.steps ?? [] }
 
-  // Set when this run resumed from a continue-as-new mid-rollout (N4/D16).
+  // Set when this run resumed from a continue-as-new mid-rollout.
   const resume = input.resumeFrom
   const completedBefore = resume?.completedSteps ?? 0
 
@@ -121,7 +121,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
   // Saga: undo actions to run (LIFO) on any non-success termination.
   const compensations: Array<() => Promise<void>> = []
   // Returns whether every undo succeeded — a failed undo means traffic may be
-  // stranded on the bad version, which the breach path escalates (D31).
+  // stranded on the bad version, which the breach path escalates.
   const compensate = async (): Promise<boolean> => {
     state = { ...state, phase: "rolling-back" }
     let restored = true
@@ -191,11 +191,11 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
   return result
 
   async function runCanary(steps: ReadonlyArray<DeploymentStepInput>): Promise<DeploymentResult> {
-    // 0. Announce the deployment (D26). The `started` notification always
+    // 0. Announce the deployment. The `started` notification always
     //    existed in the Notification contract but was never sent — added
     //    behind `patched()` because inserting an activity changes the command
     //    sequence, exactly the edit that would break replay of every history
-    //    recorded before it (the D22 fixtures prove the guard works: they
+    //    recorded before it (the committed fixtures prove the guard works: they
     //    replay through the else-branch). `deprecatePatch` is deliberately NOT
     //    next: the committed fixtures stand in for in-flight production
     //    executions, and the replay lock refuses the deprecation while they
@@ -313,7 +313,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
     return { kind: "Succeeded", service: input.service, version: input.version }
   }
 
-  // The rollback path shared by both strategies (D31/D32): compensate, verify the
+  // The rollback path shared by both strategies: compensate, verify the
   // previous version is healthy again, notify, draft a postmortem, and return
   // `RolledBack` or the louder `RollbackFailed`. Extracting it keeps the two
   // strategies' breach handling identical — and the command sequence unchanged
@@ -382,7 +382,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
     }
   }
 
-  // Blue/green (D32): deploy the new version alongside the old, health-check it,
+  // Blue/green: deploy the new version alongside the old, health-check it,
   // then flip 100% at once (optionally behind an approval) and bake. Because the
   // old version is never scaled down, a breach rolls back with a single shift.
   async function runBlueGreen(
@@ -455,7 +455,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
 }
 
 // Versioning behavior (PINNED — an in-flight deployment finishes on the worker
-// version that started it, N4/D15) is set by the worker's `defaultVersioningBehavior`
+// version that started it) is set by the worker's `defaultVersioningBehavior`
 // when it runs in versioned mode (FLUX_WORKER_BUILD_ID). It can't be declared
 // statically here: Temporal rejects a versioning behavior when the worker isn't
 // versioned, which is the default in dev and tests.

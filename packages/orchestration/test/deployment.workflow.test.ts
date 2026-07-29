@@ -126,7 +126,7 @@ describe("deploymentWorkflow", () => {
     }
   })
 
-  it("escalates to RollbackFailed when the previous version is unhealthy after rollback (D31)", async () => {
+  it("escalates to RollbackFailed when the previous version is unhealthy after rollback", async () => {
     let step = 0
     const notifications: Array<string> = []
     const result = await run({
@@ -156,7 +156,7 @@ describe("deploymentWorkflow", () => {
     expect(notifications).not.toContain("rolled-back")
   })
 
-  // Blue/green (D32): one flip to 100%, a bake, then success — or an instant
+  // Blue/green: one flip to 100%, a bake, then success — or an instant
   // rollback on a breach. The same activities and ports as the canary; only the
   // shape of the rollout differs.
   const blueGreenInput: DeploymentInput = {
@@ -168,7 +168,7 @@ describe("deploymentWorkflow", () => {
     pollIntervalMs: 100
   }
 
-  it("blue/green: flips to 100% and succeeds when the bake stays within budget (D32)", async () => {
+  it("blue/green: flips to 100% and succeeds when the bake stays within budget", async () => {
     const shifts: Array<{ version: string; weight: number }> = []
     const result = await run({
       ...okActivities(),
@@ -181,15 +181,15 @@ describe("deploymentWorkflow", () => {
     expect(shifts).toEqual([{ version: "v2.1.0", weight: 100 }])
   })
 
-  it("runs a steps-only input (no strategy field) as canary — D32 back-compat", async () => {
+  it("runs a steps-only input (no strategy field) as canary, back-compat", async () => {
     // `baseInput` carries top-level `steps` and no `strategy`; the workflow must
-    // normalize it to a canary, which is what keeps pre-D32 histories replaying.
+    // normalize it to a canary, which is what keeps older histories replaying.
     expect(baseInput.strategy).toBeUndefined()
     const result = await run(okActivities(), baseInput)
     expect(result.kind).toBe("Succeeded")
   })
 
-  it("blue/green: rolls back instantly when the bake breaches (D32)", async () => {
+  it("blue/green: rolls back instantly when the bake breaches", async () => {
     const result = await run({
       ...okActivities(),
       monitorStep: async () => ({
@@ -267,7 +267,7 @@ describe("deploymentWorkflow", () => {
     expect(shifts.at(-1)).toEqual({ version: "v2.0.8", weight: 100 })
   })
 
-  it("cancels an in-flight monitor on abort, instead of waiting out the window (N4)", async () => {
+  it("cancels an in-flight monitor on abort, instead of waiting out the window", async () => {
     // A monitor that never returns on its own: it heartbeats and waits to be
     // cancelled. Without the workflow's CancellationScope, the abort would set a
     // flag but the workflow would block here forever.
@@ -304,7 +304,7 @@ describe("deploymentWorkflow", () => {
     }
   })
 
-  it("continues-as-new mid-rollout and still completes every step (N4)", async () => {
+  it("continues-as-new mid-rollout and still completes every step", async () => {
     const shifts: Array<number> = []
     const input: DeploymentInput = {
       ...baseInput,

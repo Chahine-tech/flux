@@ -4,7 +4,7 @@ import { expect } from "vitest"
 import { AdmissionController, layer } from "../src/admission.ts"
 
 /**
- * The STM admission controller (N4/D14). The key property is atomicity under
+ * The STM admission controller. The key property is atomicity under
  * concurrency: many trigger requests racing for the last slots must never
  * over-admit. `Effect.all(..., { concurrency: "unbounded" })` fires the admits
  * in parallel; exactly `budget` of them may win.

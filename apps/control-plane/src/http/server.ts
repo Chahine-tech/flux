@@ -37,7 +37,7 @@ const RpcLive = RpcServer.layerHttp({ group: DeploymentRpcs, path: "/rpc", proto
   Layer.provide(RpcSerialization.layerJson)
 )
 
-// Codec server for the Temporal UI (D21) — deliberately outside FluxApi, so it
+// Codec server for the Temporal UI — deliberately outside FluxApi, so it
 // is not behind the bearer-token middleware. CORS lets the UI call it from the
 // browser (origin configurable for a non-default UI address).
 const CodecLive = HttpApiBuilder.layer(CodecApi).pipe(Layer.provide(CodecHandlers))

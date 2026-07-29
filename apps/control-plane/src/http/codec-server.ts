@@ -4,7 +4,7 @@ import { decodePayload, DEFAULT_THRESHOLD_BYTES, encodePayload } from "@flux/orc
 import type { Payload } from "@temporalio/common"
 
 /**
- * Temporal codec server (D21): the Temporal UI cannot read gzipped payloads on
+ * Temporal codec server: the Temporal UI cannot read gzipped payloads on
  * its own, so it POSTs them here — `{payloads: […]}` in proto-JSON form (bytes
  * as base64 strings) — and gets the decoded ones back. `/encode` completes the
  * protocol for tooling that writes payloads.

@@ -5,7 +5,7 @@ import { DeploymentWindow, Identifier, Thresholds } from "@flux/domain"
  * The body of `POST /deployments` — the request that starts a canary.
  *
  * Durations cross as milliseconds (plain numbers), matching the Effect-free
- * `DeploymentInput` the workflow consumes (D6): the control plane decodes this
+ * `DeploymentInput` the workflow consumes: the control plane decodes this
  * request and passes the value straight to `client.workflow.start`. `rules`
  * reuses the domain `Thresholds` schema so the failure budget has one definition.
  */
@@ -23,7 +23,7 @@ export const DeploymentStep = Schema.Struct({
 export type DeploymentStep = typeof DeploymentStep.Type
 
 /**
- * The rollout strategy on the wire (D32), a discriminated union on `kind` that
+ * The rollout strategy on the wire, a discriminated union on `kind` that
  * matches the workflow's `DeploymentStrategy`: `canary` carries its steps;
  * `blue-green` carries a bake window and an optional approval.
  */
@@ -51,9 +51,9 @@ export const TriggerDeploymentRequest = Schema.Struct({
   rules: Thresholds,
   pollIntervalMs: Schema.Finite.check(Schema.isGreaterThan(0)),
   /**
-   * Optional deploy window as a cron expression (N11/D28). The canary may only
+   * Optional deploy window as a cron expression. The canary may only
    * start while `now` is inside it; absent means always allowed. Checked by the
-   * control plane before admission — it never reaches the workflow (D6).
+   * control plane before admission — it never reaches the workflow.
    */
   window: Schema.optionalKey(DeploymentWindow)
 })
@@ -67,7 +67,7 @@ export type TriggerDeploymentResponse = typeof TriggerDeploymentResponse.Type
 
 /**
  * The body of `POST /deployments/multi` — roll one version out across several
- * services at once, as a parent workflow over one child per service (N4/D13).
+ * services at once, as a parent workflow over one child per service.
  */
 export const TriggerMultiRequest = Schema.Struct({
   services: Schema.NonEmptyArray(TriggerDeploymentRequest),

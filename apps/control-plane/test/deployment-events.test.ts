@@ -9,7 +9,7 @@ import { TemporalClient } from "../src/temporal-client.ts"
 /**
  * Drives the poller under a `TestClock`, with a fake `TemporalClient` whose
  * reported state the test flips between ticks. It pins the two guarantees of
- * D11 in a single sequence: a watcher gets the current state immediately, and
+ * In a single sequence: a watcher gets the current state immediately, and
  * the poller publishes a delta only when the state actually changes — an
  * unchanged tick in the middle must not produce a duplicate.
  */

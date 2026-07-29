@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { deleteDriftSchedule, driftScheduleId, ensureDriftSchedule } from "../src/schedules.ts"
 
 /**
- * Real-cluster proof for Temporal Schedules (D19/D17): the time-skipping test
+ * Real-cluster proof for Temporal Schedules: the time-skipping test
  * server has no schedule support, so the create → idempotent-update → delete
  * lifecycle runs here against the compose's actual Temporal. Gated by
  * FLUX_REAL_TEMPORAL=1:
@@ -27,7 +27,7 @@ afterAll(async () => {
   await client?.connection.close()
 })
 
-describe.skipIf(!REAL)("drift schedules on a real cluster (D19)", () => {
+describe.skipIf(!REAL)("drift schedules on a real cluster", () => {
   it("creates the schedule, updates it in place, and deletes it", async () => {
     const service = `drift-test-${Date.now()}`
     const desired = { service, desired: [{ version: "v2", weight: 100 }], reconcile: true }

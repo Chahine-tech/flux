@@ -4,12 +4,12 @@ import { Identifier, ThresholdBreach, Thresholds } from "@flux/domain"
 /**
  * Schemas for the values that cross the Temporal wire into an activity.
  *
- * Temporal's payload converter runs in the workflow VM and cannot host the
- * Effect runtime, so wire-validation lives here — at the activity boundary,
- * where the typed value exists and Effect legitimately runs (see ARCHITECTURE
- * D8). A durable workflow can be replayed with a payload from an older code
- * version; decoding here turns such drift into a clear, non-retryable failure
- * instead of a garbage value flowing into a use case.
+ * Temporal's payload converter runs in the workflow VM and can't host the
+ * Effect runtime, so wire-validation lives here, at the activity boundary,
+ * where the typed value exists and Effect is allowed to run. A durable workflow
+ * can be replayed with a payload from an older code version; decoding here turns
+ * that drift into a clear, non-retryable failure instead of a garbage value
+ * flowing into a use case.
  */
 
 export const HealthCheckParams = Schema.Struct({

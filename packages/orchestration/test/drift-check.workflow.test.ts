@@ -6,7 +6,7 @@ import type { DeploymentActivities } from "../src/activities/types.ts"
 import type { DriftCheckInput, DriftReport } from "../src/deployment-input.ts"
 
 /**
- * Drift-check workflow against a time-skipping Temporal server (N4/D17): it reads
+ * Drift-check workflow against a time-skipping Temporal server: it reads
  * the actual routing (mocked) and compares it to the desired weights, optionally
  * reconciling. Activities are mocked to control the "actual" state.
  */

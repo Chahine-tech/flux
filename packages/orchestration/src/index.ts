@@ -11,7 +11,7 @@ export * from "./activities/index.ts"
 export * from "./deployment-input.ts"
 export * from "./mapper.ts"
 export * from "./metrics.ts"
-// The Nexus service handler (D25) is deliberately NOT re-exported here: it is
+// The Nexus service handler is deliberately NOT re-exported here: it is
 // worker-side code (`@temporalio/nexus`, `nexus-rpc`) constructed at module
 // top level, which defeats tree-shaking — through this barrel it ended up
 // bundled into the CLI binary (~4x size). Import it from

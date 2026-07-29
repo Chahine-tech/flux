@@ -7,11 +7,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { ensureSearchAttributes } from "../src/search-attributes.ts"
 
 /**
- * flux-as-a-service (N9/D25): a caller namespace triggers a canary in a
+ * flux-as-a-service: a caller namespace triggers a canary in a
  * separate platform namespace through a Nexus endpoint, with no access to
  * that namespace otherwise — the multi-tenant story that makes Nexus
  * genuine. The time-skipping test server does not implement Nexus, so this
- * runs against the real cluster only, same gate as D19:
+ * runs against the real cluster only, the same gate the other real-cluster tests use:
  *
  *   docker compose up -d postgresql temporal
  *   FLUX_REAL_TEMPORAL=1 pnpm --filter @flux/worker test
@@ -94,11 +94,11 @@ afterAll(async () => {
   await callerConnection?.close()
 })
 
-describe.skipIf(!REAL)("flux-as-a-service via Temporal Nexus (N9/D25)", () => {
+describe.skipIf(!REAL)("flux-as-a-service via Temporal Nexus", () => {
   it("a canary triggered from the caller namespace completes through the platform namespace", async () => {
     // The platform worker: the same `deploymentWorkflow` + activities any
     // direct caller runs, plus the Nexus service that exposes it. Nexus tasks
-    // and the workflow it starts share this worker's task queue (D25).
+    // and the workflow it starts share this worker's task queue.
     const platformWorker = await Worker.create({
       connection: platformConnection,
       namespace: PLATFORM_NAMESPACE,

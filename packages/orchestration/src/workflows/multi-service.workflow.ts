@@ -4,10 +4,10 @@ import { abortSignal, deploymentWorkflow } from "./deployment.workflow.ts"
 
 /**
  * Multi-service rollout — deterministic parent over N `deploymentWorkflow`
- * children, one per service (N4/D13).
+ * children, one per service.
  *
  * Concurrency ("K services at a time") is a plain-TS worker pool over a queue —
- * no Effect in the deterministic parent (D6). Fail-fast: the first child that
+ * no Effect in the deterministic parent. Fail-fast: the first child that
  * does not succeed aborts every in-flight sibling via the child's `abortSignal`,
  * so each stops and rolls back its own traffic through its saga. Children that
  * had already finished are left as-is (undoing a completed rollout is a separate,

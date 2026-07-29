@@ -10,7 +10,7 @@ import { baseline, redistribute } from "./weights.ts"
  * Design:
  * - Weight registry: a plain `Ref` (service → version → weight). A single map
  *   with no multi-cell atomic coordination — STM/TxRef would buy nothing here.
- *   STM is reserved for the multi-service coordinator (N4), where several
+ *   STM is reserved for the multi-service coordinator, where several
  *   transactional cells must commit atomically with retry and no I/O inside.
  * - The critical section (regenerate config → write file → reload) is
  *   serialized with a `Semaphore(1)`: the write + reload are irreversible I/O

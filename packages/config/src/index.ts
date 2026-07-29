@@ -19,7 +19,7 @@ const temporal = Config.all({
 }).pipe(Config.nested("temporal"))
 
 const metrics = Config.all({
-  // Which MetricsPort adapter backs monitoring (D33): "prometheus" (default) or
+  // Which MetricsPort adapter backs monitoring: "prometheus" (default) or
   // "http-json" for apps exposing a plain JSON metrics endpoint.
   type: Config.string("type").pipe(Config.withDefault("prometheus")),
   prometheusUrl: Config.string("prometheus_url").pipe(Config.withDefault("http://localhost:9090")),
@@ -48,7 +48,7 @@ const notifications = Config.all({
   slackWebhook: Config.redacted("slack_webhook").pipe(Config.option)
 }).pipe(Config.nested("notifications"))
 
-// The optional LLM postmortem (D30). The key is redacted and defaults to empty:
+// The optional LLM postmortem. The key is redacted and defaults to empty:
 // unset, the postmortem no-ops rather than failing. `baseUrl` is overridable so
 // a test can point the Anthropic adapter at a local double.
 const ai = Config.all({
@@ -57,7 +57,7 @@ const ai = Config.all({
   baseUrl: Config.string("base_url").pipe(Config.withDefault("https://api.anthropic.com"))
 }).pipe(Config.nested("ai"))
 
-// What grounds the postmortem (D30): commits between versions via GitHub compare.
+// What grounds the postmortem: commits between versions via GitHub compare.
 // `repoTemplate` maps a service to `owner/repo` (`{service}` is substituted);
 // empty disables the source and the postmortem falls back to metrics only.
 const changelog = Config.all({

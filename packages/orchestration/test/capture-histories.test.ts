@@ -14,7 +14,7 @@ import type { DeploymentActivities } from "../src/activities/types.ts"
 const KEYWORD = 2
 
 /**
- * Fixture capture for the replay determinism lock (D22). Not a test of
+ * Fixture capture for the replay determinism lock. Not a test of
  * anything: it records the two histories `replay.test.ts` replays, and is
  * gated so it only runs when regenerating them is the deliberate intent:
  *
@@ -22,7 +22,7 @@ const KEYWORD = 2
  *
  * Regenerating is a reviewed act, like updating a snapshot: a workflow change
  * that breaks replay of the committed histories is exactly the change that
- * would break in-flight workflows in production. Capture runs with the D21
+ * would break in-flight workflows in production. Capture runs with the codec
  * codec on and an input past the compression threshold, so the fixtures store
  * gzipped payloads — replaying them green is also a codec-symmetry proof.
  */
@@ -112,7 +112,7 @@ const waitForPhase = async (
   throw new Error(`workflow never reached phase "${phase}"`)
 }
 
-describe.skipIf(!shouldCapture)("history fixture capture (D22)", () => {
+describe.skipIf(!shouldCapture)("history fixture capture", () => {
   it("captures a promotion through the approval gate", async () => {
     const input: DeploymentInput = {
       ...baseInput,

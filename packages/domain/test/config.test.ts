@@ -34,7 +34,7 @@ describe("DeploymentConfig", () => {
     expect(second?.approvalTimeout).toBeDefined()
   })
 
-  it("decodes a blue-green config, turning the bake shorthand into a Duration (D32)", () => {
+  it("decodes a blue-green config, turning the bake shorthand into a Duration", () => {
     const config = decode({
       ...valid,
       strategy: { _tag: "blue-green", bakeDuration: "10m", requiresApproval: true, approvalTimeout: "1h" }

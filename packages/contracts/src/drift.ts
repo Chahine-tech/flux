@@ -2,7 +2,7 @@ import { Schema } from "effect"
 import { Identifier } from "@flux/domain"
 
 /**
- * Enable drift detection for a service (N4/D17): create or update a Temporal
+ * Enable drift detection for a service: create or update a Temporal
  * Schedule that periodically checks the router actually routes `version` at 100%
  * and reconciles it if not.
  */

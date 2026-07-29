@@ -3,7 +3,7 @@ import type { DriftCheckInput } from "@flux/orchestration"
 import type { Client } from "@temporalio/client"
 
 /**
- * Drift-detection schedules (N4/D17). A Temporal Schedule runs the `driftCheck`
+ * Drift-detection schedules. A Temporal Schedule runs the `driftCheck`
  * workflow for one service on a fixed interval, comparing the router's actual
  * routing to the desired weights and reconciling on drift. Meant to be created
  * (or updated) when a deployment succeeds, so the desired state stays current.

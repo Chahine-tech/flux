@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { withDeploymentLog } from "../src/activities/deployment.activities.ts"
 
 /**
- * D29: `withDeploymentLog` (used by every activity via `linkToDeployment`)
+ * `withDeploymentLog` (used by every activity via `linkToDeployment`)
  * stamps the deployment's business id onto every log line the use case emits,
  * through `Effect.annotateLogs` — v4's successor to FiberRef. Proven with a
  * capturing logger that reads the fiber's current log annotations.
@@ -18,7 +18,7 @@ const captureAnnotations = async <A, E>(effect: Effect.Effect<A, E>): Promise<Ar
   return captured
 }
 
-describe("deployment log correlation (D29)", () => {
+describe("deployment log correlation", () => {
   it("stamps flux.deployment onto a log emitted inside the wrapper", async () => {
     const annotations = await captureAnnotations(withDeploymentLog("dep-api-123", Effect.log("shifting traffic")))
     expect(annotations).toHaveLength(1)

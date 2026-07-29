@@ -120,12 +120,12 @@ describe("control plane HTTP API", () => {
     expect(await second.json()).toMatchObject({ _tag: "ServiceAlreadyDeploying", service: "billing" })
   })
 
-  it("POST /deployments inside an always-open window proceeds (D28)", async () => {
+  it("POST /deployments inside an always-open window proceeds", async () => {
     const res = await post("/deployments", { ...validTrigger, service: "windowed-open", window: "* * * * *" })
     expect(res.status).toBe(200)
   })
 
-  it("POST /deployments outside its window is rejected 422 with the next opening (D28)", async () => {
+  it("POST /deployments outside its window is rejected 422 with the next opening", async () => {
     // A window 12 hours off the current hour is guaranteed not to contain now,
     // whenever the test runs — deterministic without controlling the clock.
     const notNowHour = (new Date().getUTCHours() + 12) % 24

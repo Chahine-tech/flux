@@ -6,7 +6,7 @@ import { clientLayer, makeClient } from "../control-plane.ts"
 
 /**
  * `flux deploy-multi` — roll one version out across several services at once
- * (N4/D13), as a parent workflow over one child per service. The rollout is
+ *, as a parent workflow over one child per service. The rollout is
  * described by a JSON file (too much for flags); it is validated against the
  * shared contract before being sent to the control plane.
  */

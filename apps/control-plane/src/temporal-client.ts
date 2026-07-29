@@ -34,7 +34,7 @@ export class TemporalClient extends Context.Service<TemporalClient, {
     workflowId: string
   ) => Effect.Effect<void, DeploymentNotFound | DeploymentNotActionable>
   readonly abort: (workflowId: string) => Effect.Effect<void, DeploymentNotFound>
-  /** Create/update the drift-check Schedule for a service (N4/D17); returns its id. */
+  /** Create/update the drift-check Schedule for a service; returns its id. */
   readonly ensureDriftSchedule: (
     service: string,
     version: string,
@@ -47,7 +47,7 @@ export class TemporalClient extends Context.Service<TemporalClient, {
 const TASK_QUEUE = "flux-deployments"
 const WORKFLOW_TYPE = "deploymentWorkflow"
 
-/** A finished deployment, as projected into the CQRS read model (D12). */
+/** A finished deployment, as projected into the CQRS read model. */
 export interface ClosedDeployment {
   readonly workflowId: string
   readonly service: string
@@ -68,7 +68,7 @@ export const make = (client: Client): typeof TemporalClient.Service => {
   const handle = (workflowId: string) => client.workflow.getHandle(workflowId)
 
   return {
-    // D24: the current span (the HTTP request's) becomes the trace root the
+    // The current span (the HTTP request's) becomes the trace root the
     // whole deployment — CLI/control-plane through every activity — shares.
     start: (request) =>
       withClientTraceContext(async () => {
@@ -76,7 +76,7 @@ export const make = (client: Client): typeof TemporalClient.Service => {
         await client.workflow.start(WORKFLOW_TYPE, {
           taskQueue: TASK_QUEUE,
           workflowId,
-          // The request is structurally the workflow's Effect-free input (D6).
+          // The request is structurally the workflow's Effect-free input.
           args: [request as DeploymentInput]
         })
         return workflowId
@@ -192,7 +192,7 @@ export const layer = (config: TemporalClientConfig): Layer.Layer<TemporalClient>
         new Client({
           connection,
           namespace: config.namespace,
-          // Symmetric with the worker (D21): large payloads travel gzipped.
+          // Symmetric with the worker: large payloads travel gzipped.
           dataConverter: { payloadCodecs: [makePayloadCodec()] },
           interceptors: { workflow: [traceparentClientInterceptor] }
         })

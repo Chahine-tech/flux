@@ -24,7 +24,7 @@ export interface DeploymentStepInput {
 }
 
 /**
- * The rollout strategy the workflow runs (D32). A discriminated union so the
+ * The rollout strategy the workflow runs. A discriminated union so the
  * workflow branches on `kind`: `canary` shifts traffic gradually across steps;
  * `blue-green` flips 100% at once after a health check and bakes.
  */
@@ -42,14 +42,14 @@ export interface DeploymentInput {
   readonly version: string
   readonly previousVersion: string
   /**
-   * The rollout strategy (D32). Optional so two things keep working: histories
-   * recorded before D32 (which carry a top-level `steps` array and no
+   * The rollout strategy. Optional so two things keep working: histories
+   * recorded before strategy support (which carry a top-level `steps` array and no
    * `strategy`), and callers that pass `steps` as a canary shorthand. When
    * absent, the workflow normalizes to `{ kind: "canary", steps }` — an identical
    * command sequence, which is what keeps the committed histories replaying.
    */
   readonly strategy?: DeploymentStrategy
-  /** Canary steps as a top-level shorthand / pre-D32 back-compat — the `strategy` fallback. */
+  /** Canary steps as a top-level shorthand / back-compat — the `strategy` fallback. */
   readonly steps?: ReadonlyArray<DeploymentStepInput>
   readonly rules: ReadonlyArray<DeploymentRule>
   /** How often each step samples metrics while monitoring, in milliseconds. */
@@ -57,7 +57,7 @@ export interface DeploymentInput {
   /**
    * Bound a single workflow run to this many steps: after completing that many,
    * the workflow continues-as-new with the remaining steps to keep history
-   * small (N4/D16). Temporal's own `continueAsNewSuggested` triggers the same
+   * small. Temporal's own `continueAsNewSuggested` triggers the same
    * behaviour automatically for long histories; this is the explicit override.
    */
   readonly continueAsNewAfterSteps?: number
@@ -76,7 +76,7 @@ export interface DeploymentInput {
 }
 
 /**
- * Roll out a version across several services at once (N4/D13). Modelled as a
+ * Roll out a version across several services at once. Modelled as a
  * parent workflow over N per-service `deploymentWorkflow` children.
  */
 export interface MultiServiceInput {
@@ -107,7 +107,7 @@ export interface RouteWeight {
   readonly weight: number
 }
 
-/** Input to a drift check (N4/D17): does the router actually route as desired? */
+/** Input to a drift check: does the router actually route as desired? */
 export interface DriftCheckInput {
   readonly service: string
   readonly desired: ReadonlyArray<RouteWeight>

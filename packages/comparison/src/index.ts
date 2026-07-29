@@ -1,9 +1,9 @@
 /**
- * @flux/comparison — the N7 comparison experiment (D23).
+ * @flux/comparison — the comparison experiment.
  *
  * The Temporal canary reimplemented on `effect/unstable/workflow` +
  * `unstable/cluster`. Never imported by the production apps — this package
- * exists to produce the comparison ARCHITECTURE.md §8 promised, not to
+ * exists to produce the comparison the project set out to write, not to
  * migrate flux.
  */
 export * from "./activities.ts"

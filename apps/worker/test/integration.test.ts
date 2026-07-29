@@ -63,7 +63,7 @@ const appLayer = (baseUrl: string, configPath: string): Layer.Layer<AppServices>
     GitHubChangelog.layerNone
   ).pipe(Layer.provide(PlatformLayer))
 
-// The same stack with the Caddy adapter driving the admin-API double (D20).
+// The same stack with the Caddy adapter driving the admin-API double.
 const caddyAppLayer = (baseUrl: string): Layer.Layer<AppServices> =>
   Layer.mergeAll(
     PrometheusMetrics.layer({ url: baseUrl }),
@@ -206,7 +206,7 @@ describe("worker integration", () => {
     }
   }, 90_000)
 
-  it("runs the same canary through the Caddy adapter, proving the port (D20)", async () => {
+  it("runs the same canary through the Caddy adapter, proving the port", async () => {
     const runtime = ManagedRuntime.make(caddyAppLayer(baseUrl))
     const worker = await Worker.create({
       connection: env.nativeConnection,
@@ -243,7 +243,7 @@ describe("worker integration", () => {
     }
   }, 90_000)
 
-  it("gzips large payloads on the wire and in history — codec on both sides (D21)", async () => {
+  it("gzips large payloads on the wire and in history — codec on both sides", async () => {
     const configPath = join(tmpdir(), `flux-nginx-codec-${Date.now()}.conf`)
     const runtime = ManagedRuntime.make(appLayer(baseUrl, configPath))
     const dataConverter = { payloadCodecs: [makePayloadCodec()] }
@@ -255,7 +255,7 @@ describe("worker integration", () => {
       activities: createActivities(runtime),
       dataConverter
     })
-    // A client with the same codec — the symmetric wiring D21 requires.
+    // A client with the same codec — the symmetric wiring the codec requires.
     const client = new Client({
       connection: env.connection,
       namespace: env.namespace ?? "default",

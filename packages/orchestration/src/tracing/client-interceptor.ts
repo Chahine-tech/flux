@@ -4,7 +4,7 @@ import { Effect, Option } from "effect"
 import { encodeHeaderPayload, formatTraceparent, TRACEPARENT_HEADER_KEY } from "./traceparent.ts"
 
 /**
- * Client-side half of D24. The interceptor itself is an ordinary async
+ * Client-side half. The interceptor itself is an ordinary async
  * function registered once on the long-lived `Client` — it has no ambient
  * Effect context of its own, so it reads the traceparent from
  * `AsyncLocalStorage` instead. `withClientTraceContext` is the bridge: it

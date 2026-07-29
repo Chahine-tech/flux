@@ -10,7 +10,7 @@ export interface ChangelogEntry {
 /**
  * Port: what changed between two versions of a service.
  *
- * This is the input that turns the rollback postmortem (D30) from a paraphrase
+ * This is the input that turns the rollback postmortem from a paraphrase
  * of metrics the operator already sees into something grounded — the model can
  * correlate the actual code change with the symptom. Implemented by the GitHub
  * compare adapter; a no-op adapter (empty history) stands in when no source is

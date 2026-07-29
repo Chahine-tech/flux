@@ -5,18 +5,16 @@ import type { ThresholdBreach } from "@flux/domain"
 import { type ChangelogEntry, ChangelogPort } from "../ports/changelog.ts"
 
 /**
- * Use case: draft a short rollback postmortem with a language model (D30).
+ * Ask a language model to write a short postmortem after a rollback.
  *
- * This is the one place flux uses `effect/unstable/ai`, and it uses it the way
- * the abstraction intends: the program depends on the *abstract* `LanguageModel`
- * service, never on a concrete provider. Which model actually answers — the
- * Anthropic adapter, a disabled stub, a test double — is decided by whatever
- * `Layer` the runtime provides, exactly like the four hand-written ports.
+ * The only place flux touches effect/unstable/ai. It depends on the abstract
+ * LanguageModel service and never on a concrete provider, so which model answers
+ * (the Anthropic adapter, a disabled stub, a test double) comes down to whichever
+ * Layer the runtime provides. Same idea as the four hand-written ports.
  *
- * The prompt is split the way the port normalizes it: a fixed `system` message
- * setting the role, and a `user` message carrying the breach facts. The provider
- * maps each to its wire equivalent. The caller (the rollback activity) runs this
- * best-effort — a failure here never affects the rollback that already happened.
+ * The prompt is a fixed system message for the role plus a user message with the
+ * breach facts. The rollback activity calls this best-effort: if it fails, the
+ * rollback already happened, nothing changes.
  */
 
 /** Everything the model needs to reason about a rollback. */

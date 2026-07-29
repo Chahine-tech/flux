@@ -1,7 +1,7 @@
 import { Cron, Result, Schema } from "effect"
 
 /**
- * Deployment windows (D28): a canary may only start inside an allowed
+ * Deployment windows: a canary may only start inside an allowed
  * recurring time window, expressed as a **cron expression**. A wildcard minute
  * field makes the expression a window rather than an instant — `* 9-17 * * 1-5`
  * is "any weekday 09:00–17:59". `Cron.match` tests membership; `Cron.next`
@@ -9,7 +9,7 @@ import { Cron, Result, Schema } from "effect"
  *
  * The evaluator is pure and total (time is passed in, not read), the same
  * shape as `evaluateThresholds` — so it is unit- and property-testable, and
- * lives in the domain rather than in the STM admission transaction (D14),
+ * lives in the domain rather than in the STM admission transaction,
  * which stays a pure concurrency invariant. The temporal gate is orthogonal.
  */
 

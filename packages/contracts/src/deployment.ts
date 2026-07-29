@@ -6,7 +6,7 @@ import { Schema } from "effect"
  *
  * These mirror the Effect-free interfaces the workflow exposes (`@flux/orchestration`
  * `DeploymentState` / `DeploymentResult`) — the workflow bundle must stay free of
- * Effect (D6), so the runtime-validated versions live here, on the Effect side of
+ * Effect, so the runtime-validated versions live here, on the Effect side of
  * the boundary. The two representations are kept structurally compatible on purpose.
  */
 

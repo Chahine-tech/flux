@@ -3,7 +3,7 @@ import type { Payload, PayloadCodec } from "@temporalio/common"
 import { Effect } from "effect"
 
 /**
- * Payload compression codec (D21) — the byte-level Effect ⇄ Temporal meeting
+ * Payload compression codec — the byte-level Effect ⇄ Temporal meeting
  * point deferred by D8b. Runs on the main thread (never inside the workflow
  * VM): payloads above `threshold` are gzip-compressed before hitting the wire
  * and Temporal's history, and transparently decompressed on the way back.

@@ -1,9 +1,9 @@
 import type { Payload } from "@temporalio/common"
 
 /**
- * W3C `traceparent` encode/decode over a Temporal `Headers` entry (D24). Pure,
+ * W3C `traceparent` encode/decode over a Temporal `Headers` entry. Pure,
  * dependency-free (no `effect` import) — safe to import from the workflow-side
- * interceptor module, which is bundled into the deterministic VM (D6) and must
+ * interceptor module, which is bundled into the deterministic VM and must
  * stay Effect-free like the workflow files themselves.
  */
 

@@ -2,7 +2,7 @@ import { Context, Effect, Layer, TxHashMap, TxSemaphore } from "effect"
 import { DeploymentBudgetExhausted, ServiceAlreadyDeploying } from "@flux/contracts"
 
 /**
- * Admission control for deployments (N4/D14) — the genuine home of Effect STM.
+ * Admission control for deployments — the genuine home of Effect STM.
  *
  * Two rules are enforced globally across the control plane: at most
  * `maxConcurrent` deployments run at once (blast-radius budget), and a service
@@ -13,7 +13,7 @@ import { DeploymentBudgetExhausted, ServiceAlreadyDeploying } from "@flux/contra
  * The two cells must stay consistent (a held permit ⇔ a set entry), which is
  * exactly the multi-cell invariant STM exists to protect.
  *
- * A slot is released when the deployment ends — the poller (D11) observes the
+ * A slot is released when the deployment ends — the poller observes the
  * terminal transition and calls `release` — or immediately if the workflow fails
  * to start.
  */

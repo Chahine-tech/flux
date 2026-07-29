@@ -12,7 +12,7 @@ import { ApprovalGate, DeploymentWorkflow, DeploymentWorkflowLive } from "../src
 /**
  * Mirrors `deployment.workflow.test.ts` scenario-for-scenario, on
  * `effect/unstable/workflow`'s in-memory engine (no durability — that is a
- * separate, deliberately smaller proof; see ARCHITECTURE.md D23). Same test
+ * separate, deliberately smaller proof). Same test
  * doubles pattern as `packages/application/test/use-cases.test.ts`.
  */
 
@@ -73,7 +73,7 @@ const testLayer = (router: ReturnType<typeof recordingRouter>["layer"], metrics:
  * cascade through both under the in-memory engine the way it does for a bare
  * `Stream.schedule` call (as in `use-cases.test.ts`). Pumping in small
  * increments with a yield between each is the reliable shape; found
- * empirically, noted for the comparison (D23).
+ * empirically, noted for the comparison.
  */
 const pumpClock = Effect.gen(function*() {
   for (let i = 0; i < 100; i++) {
@@ -82,7 +82,7 @@ const pumpClock = Effect.gen(function*() {
   }
 })
 
-describe("DeploymentWorkflow (effect/unstable/workflow, D23)", () => {
+describe("DeploymentWorkflow (effect/unstable/workflow)", () => {
   it.effect("succeeds when every step stays within budget", () =>
     Effect.gen(function*() {
       const router = recordingRouter()

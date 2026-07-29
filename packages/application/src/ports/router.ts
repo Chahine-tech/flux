@@ -29,7 +29,7 @@ export class RouterPort extends Context.Service<RouterPort, {
   /**
    * The routing actually in effect for `service` — read from the live backend
    * (e.g. the on-disk nginx config), not from what flux believes it applied.
-   * This is what drift detection (N4/D17) compares against the desired state.
+   * This is what drift detection compares against the desired state.
    */
   readonly readState: (service: string) => Effect.Effect<ReadonlyArray<VersionWeight>, RouterUnavailable>
 }>()("RouterPort") {}

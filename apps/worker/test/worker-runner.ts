@@ -3,7 +3,7 @@ import { NativeConnection, Worker } from "@temporalio/worker"
 import { activities } from "./worker-doubles.ts"
 
 /**
- * Child worker for the D27 worker-SIGKILL proof — the Temporal-side twin of
+ * Child worker for the worker-SIGKILL proof — the Temporal-side twin of
  * `packages/comparison/test/cluster-runner.ts`. Runs the real workflow bundle
  * with the shared logging doubles; the test kills this process mid-monitor
  * and hands the task queue to a fresh worker, which must complete the canary

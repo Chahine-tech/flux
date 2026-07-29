@@ -3,23 +3,20 @@ import { AiError, LanguageModel, type Prompt, type Response } from "effect/unsta
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 
 /**
- * A minimal, text-only Anthropic provider for `effect/unstable/ai`'s
- * provider-agnostic `LanguageModel` port (D30).
+ * A small, text-only Anthropic provider for effect/unstable/ai's LanguageModel
+ * port. This adapter is the one place that knows about Anthropic's Messages API;
+ * everything above it just talks to the abstract port.
  *
- * The point of the exercise is to use the `LanguageModel` abstraction *honestly*
- * — a use case depends on the abstract port, and this adapter is the one place
- * that knows about Anthropic's Messages API. It implements only the
- * `generateText` hook `LanguageModel.make` asks for: it maps the normalized
- * `ProviderOptions.prompt` to a `POST /v1/messages` request over an Effect
- * `HttpClient`, and maps the completion back to a single text response part.
- * `streamText` is deliberately unimplemented — flux's one caller (the rollback
- * postmortem) does a single non-streaming generation, so a streaming path would
- * be untested weight. It fails loudly rather than pretending.
+ * It implements the one hook LanguageModel.make needs, generateText: turn the
+ * normalized prompt into a POST /v1/messages over an Effect HttpClient, turn the
+ * completion back into a single text part. streamText isn't implemented. The only
+ * caller (the rollback postmortem) generates once, non-streaming, so a streaming
+ * path would just be untested weight. It fails instead of pretending.
  *
- * The API key is `Redacted` so it never reaches a log or trace. When it is empty
- * (the default when `AI_ANTHROPIC_API_KEY` is unset), `generateText` fails
- * immediately with no network call — the postmortem is best-effort and simply
- * no-ops, so an operator who never configures a key pays nothing.
+ * The API key is Redacted so it stays out of logs and traces. Empty key (the
+ * default, when AI_ANTHROPIC_API_KEY isn't set) fails right away without a
+ * network call, so the best-effort postmortem quietly no-ops and an operator who
+ * never sets a key pays nothing.
  */
 
 /** How to reach the Anthropic Messages API. */

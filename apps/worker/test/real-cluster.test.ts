@@ -7,7 +7,7 @@ import { ensureSearchAttributes } from "../src/search-attributes.ts"
 import { pollerBehaviors, tuner, versioningOptions } from "../src/worker-config.ts"
 
 /**
- * Real-cluster proofs (D19): the capabilities the time-skipping test server
+ * Real-cluster proofs: the capabilities the time-skipping test server
  * does not implement — Worker Deployment Versioning and the resource tuner —
  * run here against the compose's actual Temporal. Gated by FLUX_REAL_TEMPORAL=1
  * so the default `pnpm test` stays hermetic:
@@ -59,7 +59,7 @@ afterAll(async () => {
   await connection?.close()
 })
 
-describe.skipIf(!REAL)("real cluster (D19)", () => {
+describe.skipIf(!REAL)("real cluster", () => {
   it("resource tuner: a worker running the production tuner completes a canary", async () => {
     const taskQueue = `flux-real-tuner-${Date.now()}`
     const worker = await Worker.create({
@@ -80,7 +80,7 @@ describe.skipIf(!REAL)("real cluster (D19)", () => {
     expect(result.kind).toBe("Succeeded")
   })
 
-  it("poller autoscaling: an autoscaling-poller worker completes a canary, and the backlog is introspectable (D34)", async () => {
+  it("poller autoscaling: an autoscaling-poller worker completes a canary, and the backlog is introspectable", async () => {
     const taskQueue = `flux-real-pollers-${Date.now()}`
     const worker = await Worker.create({
       connection,
@@ -98,7 +98,7 @@ describe.skipIf(!REAL)("real cluster (D19)", () => {
         args: [quickCanary("api")]
       }) as DeploymentResult
 
-      // The D34 introspection surface reads the queue's backlog + pollers over
+      // The introspection surface reads the queue's backlog + pollers over
       // the raw DescribeTaskQueue gRPC — proving the call shape against a real
       // server (the time-skipping test server can't report queue stats).
       const backlog = await taskQueueBacklog(client.connection.workflowService, { namespace, taskQueue })
@@ -110,7 +110,7 @@ describe.skipIf(!REAL)("real cluster (D19)", () => {
     expect(result.kind).toBe("Succeeded")
   })
 
-  it("worker versioning: a versioned worker pins the workflows it runs (D15)", async () => {
+  it("worker versioning: a versioned worker pins the workflows it runs", async () => {
     const taskQueue = `flux-real-versioning-${Date.now()}`
     const deploymentName = `flux-worker-test-${Date.now()}`
     const buildId = "1.0.0"

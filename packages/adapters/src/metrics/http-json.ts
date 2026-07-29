@@ -3,19 +3,18 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { MetricsPort, MetricsUnavailable } from "@flux/application"
 
 /**
- * Generic HTTP-JSON metrics adapter (D33) — implements `MetricsPort` for apps
- * that expose a plain JSON metrics endpoint instead of Prometheus. Requires an
- * `HttpClient`.
+ * A MetricsPort backed by a plain JSON endpoint, for apps that don't run
+ * Prometheus. Needs an HttpClient.
  *
- * `MetricsPort.query` is an opaque string; where the Prometheus adapter reads it
- * as PromQL, this one reads it as `"<url> <json-path>"` (whitespace-separated):
- * it GETs the URL and extracts a numeric value at a dotted path
- * (`data.checkout.error_rate`; array segments are numeric indices). Same
- * `MetricRule` shape, a different interpretation of its `query`.
+ * MetricsPort.query is just a string, and each adapter is free to read it how it
+ * likes. The Prometheus adapter treats it as PromQL. This one treats it as
+ * "<url> <json-path>": GET the url, pull a number out at a dotted path like
+ * data.checkout.error_rate (numbers in the path index into arrays). Same rules,
+ * different reading of the query.
  *
- * Like the Prometheus adapter, queries flow through a RequestResolver so rules
- * that share the exact `"<url> <path>"` are fetched once per poll, and transient
- * HTTP failures retry with a jittered backoff here rather than in the workflow.
+ * Same RequestResolver as the Prometheus adapter, so two rules with the same
+ * "<url> <path>" hit the endpoint once per poll. Transient HTTP errors retry
+ * with backoff here, not in the workflow.
  */
 
 /** Build a metrics query string for this adapter. */

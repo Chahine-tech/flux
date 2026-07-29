@@ -52,7 +52,7 @@ describe("activity input validation (Schema at the Effect boundary)", () => {
     ).rejects.toThrow()
   })
 
-  // The postmortem is best-effort by construction (D30): even when the model
+  // The postmortem is best-effort by construction: even when the model
   // fails, the activity resolves — a rollback that already happened must never
   // be undone by a failed postmortem.
   it("postmortem never rejects, even when the model is unavailable", async () => {

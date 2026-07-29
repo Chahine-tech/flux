@@ -4,7 +4,7 @@ import { clientLayer, makeClient } from "../control-plane.ts"
 
 /**
  * `flux stats` — per-service aggregates from the control plane's CQRS read
- * model (N3/D12): the questions Temporal visibility can't answer (rollback
+ * model: the questions Temporal visibility can't answer (rollback
  * rate, mean canary duration).
  */
 export const stats = Command.make("stats", {

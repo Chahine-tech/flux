@@ -11,7 +11,7 @@ import { clientLayer, makeClient } from "../control-plane.ts"
  *
  * Flags build a raw config that is validated through the domain `Schema`, mapped
  * to the workflow input, and sent to the control plane's `POST /deployments`
- * (N4) — so the deployment passes the admission controller (global concurrency
+ * — so the deployment passes the admission controller (global concurrency
  * budget, one deployment per service) instead of starting the workflow directly.
  * Canary steps and thresholds use built-in defaults.
  */
@@ -27,7 +27,7 @@ export const deploy = Command.make("deploy", {
   ),
   strategy: Flag.string("strategy").pipe(
     Flag.withDefault("canary"),
-    Flag.withDescription('Rollout strategy: "canary" (default) or "blue-green" (D32)')
+    Flag.withDescription('Rollout strategy: "canary" (default) or "blue-green"')
   ),
   bake: Flag.string("bake").pipe(
     Flag.withDefault("30s"),
@@ -35,7 +35,7 @@ export const deploy = Command.make("deploy", {
   ),
   window: Flag.string("window").pipe(
     Flag.optional,
-    Flag.withDescription('Only deploy inside this cron window, e.g. "* 9-17 * * 1-5" (N11/D28)')
+    Flag.withDescription('Only deploy inside this cron window, e.g. "* 9-17 * * 1-5"')
   ),
   controlPlane: Flag.string("control-plane").pipe(
     Flag.withDefault("http://localhost:8080"),

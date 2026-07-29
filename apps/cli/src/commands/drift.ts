@@ -5,7 +5,7 @@ import { clientLayer, makeClient } from "../control-plane.ts"
 
 /**
  * `flux drift` — turn drift detection on (or off, with `--off`) for a service
- * (N4/D17). On enable, the control plane creates a Temporal Schedule that
+ *. On enable, the control plane creates a Temporal Schedule that
  * periodically checks the router really routes `version` at 100% and reconciles
  * it if it has drifted; `--off` deletes that Schedule (idempotent).
  */

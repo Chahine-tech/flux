@@ -8,7 +8,7 @@ import * as AnthropicLanguageModel from "../src/ai/anthropic-language-model.ts"
 import * as GitHubChangelog from "../src/changelog/github.ts"
 
 /**
- * D30, hermetic: the postmortem use case, run against the real adapters — the
+ * Hermetic: the postmortem use case, run against the real adapters — the
  * Anthropic provider and the GitHub-compare changelog — both pointed at a local
  * HTTP double. No network, no real key. It proves the wiring the design
  * promises:
@@ -81,7 +81,7 @@ const grounded = () =>
     GitHubChangelog.layer({ repoTemplate: "acme/{service}", token: Redacted.make(""), baseUrl })
   )
 
-describe("grounded rollback postmortem (D30)", () => {
+describe("grounded rollback postmortem", () => {
   it("consults the changelog and carries both commits and breach facts to the model", async () => {
     const analysis = await Effect.runPromise(
       postmortem(context).pipe(Effect.provide(grounded()), Effect.provide(NodeHttpClient.layerUndici))

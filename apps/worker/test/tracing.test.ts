@@ -21,14 +21,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { fileURLToPath } from "node:url"
 
 /**
- * D24, end to end: the CLI/control-plane's current Effect span becomes a
+ * End to end: the CLI/control-plane's current Effect span becomes a
  * `traceparent` on the workflow's start headers (client interceptor), the
  * workflow forwards it onto every activity it schedules (the Effect-free
- * workflow-side interceptor, bundled into the VM per D6), and the activity
+ * workflow-side interceptor, bundled into the VM to stay Effect-free), and the activity
  * decodes it back into an `ExternalSpan` (worker-side interceptor) — replacing
- * the old runId-derived synthetic root (voie B, N2).
+ * the old runId-derived synthetic root.
  *
- * Proven the same way D21's codec was: fetch the raw recorded history and read
+ * Proven the same way the codec was: fetch the raw recorded history and read
  * the header off the wire, not by staring at a Jaeger UI.
  */
 
@@ -81,7 +81,7 @@ afterAll(async () => {
   await env?.teardown()
 })
 
-describe("D24 traceparent propagation", () => {
+describe("traceparent propagation", () => {
   it("carries one traceparent from the client span through to a scheduled activity", async () => {
     const runtime = ManagedRuntime.make(okPorts)
     const client = new Client({

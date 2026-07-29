@@ -24,10 +24,10 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
       Effect.gen(function*() {
         const admission = yield* AdmissionController
         const temporal = yield* TemporalClient
-        // Temporal gate (D28), before the STM reservation: reject a deploy
+        // Temporal gate, before the STM reservation: reject a deploy
         // outside its window with the next opening time. `window` is
         // control-plane-only policy — stripped here so it never reaches the
-        // workflow (D6) or its history.
+        // workflow or its history.
         const { window, ...input } = payload
         const decision = evaluateWindow(window, yield* DateTime.nowAsDate)
         if (decision._tag === "Closed") {
@@ -82,7 +82,7 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
         yield* temporal.abort(params.workflowId)
       })))
 
-/** Implementation of the `stats` group against the CQRS read model (D12). */
+/** Implementation of the `stats` group against the CQRS read model. */
 export const StatsHandlers = HttpApiBuilder.group(FluxApi, "stats", (handlers) =>
   handlers.handle("stats", () =>
     Effect.gen(function*() {

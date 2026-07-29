@@ -9,13 +9,13 @@ import type { DeploymentActivities } from "../src/activities/types.ts"
 const KEYWORD = 2
 
 /**
- * D26, the forward half: a NEW execution takes the patched path — the
+ * The forward half: a NEW execution takes the patched path — the
  * `started` notification fires first, and the recorded history carries the
  * patch marker the guard wrote. The backward half (histories recorded before
- * the patch replay through the else-branch) is proven by the D22 lock in
- * `replay.test.ts`, whose fixtures predate the patch; the negative proof
- * (same edit without the guard → `DeterminismViolationError`) was run and is
- * documented in ARCHITECTURE.md D26.
+ * the patch replay through the else-branch) is proven by the replay lock in
+ * `replay.test.ts`, whose fixtures predate the patch. I also checked the
+ * negative: the same edit without the guard fails those fixtures with a
+ * `DeterminismViolationError`.
  */
 
 const TASK_QUEUE = "flux-patching"
@@ -52,7 +52,7 @@ afterAll(async () => {
   await env?.teardown()
 })
 
-describe("workflow patching (D26)", () => {
+describe("workflow patching", () => {
   it("a new execution takes the patched path: started notification first, patch marker in history", async () => {
     const notifications: Array<{ kind: string; service: string }> = []
     const activities: DeploymentActivities = {

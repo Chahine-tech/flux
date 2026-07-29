@@ -2,12 +2,12 @@ import type { WorkerTuner } from "@temporalio/worker"
 
 /**
  * Worker configuration shared by the process entrypoint (`main.ts`) and the
- * real-cluster tests (D19) — the tests must prove the exact values production
+ * real-cluster tests — the tests must prove the exact values production
  * runs with, not a copy.
  */
 
 /**
- * Deployment-based Worker Versioning (N4/D15): when a build id is provided,
+ * Deployment-based Worker Versioning: when a build id is provided,
  * this worker joins a named deployment and pins in-flight workflows to their
  * version, so a rolling upgrade (v1 → v2) never breaks a canary mid-flight —
  * new deployments start on v2, ones already running finish on v1. Left off in
@@ -26,7 +26,7 @@ export const versioningOptions = (env: NodeJS.ProcessEnv = process.env) => {
 }
 
 /**
- * Resource-based slot tuning (N4/D18). flux's slot profiles genuinely differ:
+ * Resource-based slot tuning. flux's slot profiles genuinely differ:
  * monitoring is a small number of long-lived, heartbeating activities that each
  * hold a slot for a whole window, so activity slots are capped by *resource
  * pressure* rather than a fixed count that could over-commit memory under a
@@ -43,15 +43,14 @@ export const tuner: WorkerTuner = {
 }
 
 /**
- * Poller autoscaling (N16/D34): the SDK grows and shrinks the number of open
- * poll calls between `minimum` and `maximum` based on the server's backlog
- * feedback — a quiet queue holds a single poller, a burst of concurrent
- * deployments scales up, all within one process. This is Temporal's own answer
- * to "scale to load without Kubernetes"; it needs server >= 1.28.0 (the compose
- * runs 1.29.x). It is orthogonal to and composes with the resource `tuner`:
- * poller behavior decides how many tasks the worker *asks* for, the tuner how
- * many task *slots* those tasks may occupy. Exported so the real-cluster proof
- * runs the exact production values.
+ * Grow and shrink the number of open poll calls with the queue backlog, between
+ * min and max. An idle worker holds a single poller, a burst of deployments
+ * scales up, all in one process. Needs a Temporal server >= 1.28.0 (compose runs
+ * 1.29).
+ *
+ * Separate from the resource tuner, and they stack: poller behavior is how many
+ * tasks the worker asks for, the tuner is how many it can run at once. Exported
+ * so the real-cluster test runs the same values production does.
  */
 export const pollerBehaviors = (env: NodeJS.ProcessEnv = process.env) => {
   const autoscaling = (minimum: number, maximum: number) => ({

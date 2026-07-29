@@ -3,7 +3,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstab
 import { type ChangelogEntry, ChangelogPort, ChangelogUnavailable } from "@flux/application"
 
 /**
- * ChangelogPort backed by GitHub's compare API (D30 grounding).
+ * ChangelogPort backed by GitHub's compare API.
  *
  * `GET /repos/{owner}/{repo}/compare/{base}...{head}` returns the commits
  * between two refs; flux's version strings are used as the refs (tags). The

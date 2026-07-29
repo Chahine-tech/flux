@@ -6,7 +6,7 @@ import { DeploymentWindow, evaluateWindow } from "../src/window.ts"
 
 const decodeWindow = Schema.decodeUnknownSync(DeploymentWindow)
 
-describe("evaluateWindow (D28)", () => {
+describe("evaluateWindow", () => {
   it("an absent window is always open", () => {
     expect(evaluateWindow(undefined, new Date("2026-07-19T03:00:00Z"))._tag).toBe("Open")
   })

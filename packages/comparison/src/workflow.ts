@@ -5,14 +5,14 @@ import { DurableDeferred, Workflow } from "effect/unstable/workflow"
 import { healthCheckActivity, monitorStepActivity, shiftTrafficActivity } from "./activities.ts"
 
 /**
- * The same canary reimplemented on `effect/unstable/workflow` (D23/N7) — not a
+ * The same canary reimplemented on `effect/unstable/workflow` — not a
  * migration target, a comparison datapoint. Scenarios mirror
  * `deployment.workflow.test.ts`: sequencing, a manual approval gate, and a
  * threshold breach rolling back.
  *
  * Deliberately narrower than the Temporal version: no abort-mid-monitor
  * signal, no continueAsNew, no search attributes. Scoped out, not silently
- * dropped — see ARCHITECTURE.md D23 for the reasoning.
+ * dropped.
  */
 
 /** Approval gate for a step, external code resolves it via `DurableDeferred.done`. */
@@ -27,7 +27,7 @@ export const DeploymentWorkflow = Workflow.make("DeploymentWorkflow", {
     rules: Schema.NonEmptyArray(MetricRule)
   },
   success: Succeeded,
-  // Where D8's split shows up differently: Temporal folds every outcome
+  // Where the pure/effectful split shows up differently: Temporal folds every outcome
   // (including RolledBack) into one success-shaped Result because its
   // workflow return channel is where `flux history`/CLI reads it, and its
   // saga is hand-rolled compensations run from a catch block. Here

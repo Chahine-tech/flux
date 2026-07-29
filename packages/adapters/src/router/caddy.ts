@@ -6,7 +6,7 @@ import { baseline, redistribute } from "./weights.ts"
 /**
  * Caddy routing adapter — implements RouterPort against Caddy's admin API
  * (default `localhost:2019`), the deliberate opposite of the nginx adapter's
- * shape (D20):
+ * shape:
  *
  * - **No file, no reload, no lock.** Weights change through a `PATCH` on the
  *   managed route; Caddy applies config changes atomically. The nginx adapter's

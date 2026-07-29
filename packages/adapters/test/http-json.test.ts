@@ -92,7 +92,7 @@ const runQueries = (queries: ReadonlyArray<string>) =>
     )
   )
 
-describe("HttpJsonMetrics against a real endpoint (D33)", () => {
+describe("HttpJsonMetrics against a real endpoint", () => {
   it("reads a value at the JSON path and dedups a shared query to one request", async () => {
     hits = 0
     const q = `${baseUrl}/metrics data.checkout.error_rate`

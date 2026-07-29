@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from "vitest"
 import { CodecApi, CodecHandlers } from "../src/http/codec-server.ts"
 
 /**
- * The Temporal-UI codec server (D21) as a fetch handler: a payload big enough
+ * The Temporal-UI codec server as a fetch handler: a payload big enough
  * to compress goes through `/codec/encode` and comes back verbatim from
  * `/codec/decode` — the exact protocol the UI speaks (bytes as base64).
  */

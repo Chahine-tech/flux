@@ -4,7 +4,7 @@ import type { ServiceStats } from "@flux/contracts"
 import { TemporalClient } from "./temporal-client.ts"
 
 /**
- * CQRS read model for the control plane (N3, D12).
+ * CQRS read model for the control plane.
  *
  * Temporal advanced visibility lists and filters deployments but cannot
  * aggregate (no `GROUP BY`, no averages), so a poller projects finished

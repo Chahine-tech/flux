@@ -3,14 +3,14 @@ import type { DeploymentState } from "@flux/contracts"
 import { TemporalClient } from "./temporal-client.ts"
 
 /**
- * Real-time deployment state for the control plane (N3, D11).
+ * Real-time deployment state for the control plane.
  *
  * A Temporal `Query` is pull-only and a workflow can't push events out of band
- * (D6), so this service owns an internal `PubSub` fed by a poller: on a fixed
+ *, so this service owns an internal `PubSub` fed by a poller: on a fixed
  * schedule it lists the running deployments, queries each one's state, and
  * publishes only the *deltas* (a state that is new or has changed). `watch`
  * gives a subscriber the current state immediately, then every subsequent
- * change — which is what `flux status --watch` streams over the socket (N3.4).
+ * change — which is what `flux status --watch` streams over the socket.
  */
 export interface DeploymentEvent {
   readonly workflowId: string
@@ -28,7 +28,7 @@ export interface DeploymentEventsConfig {
   readonly maxTracked: number
   /**
    * Called once with the service name when a tracked deployment leaves the
-   * running set (it finished). Used to release its admission slot (N4/D14).
+   * running set (it finished). Used to release its admission slot.
    * Defaults to a no-op so the poller stays decoupled from admission control.
    */
   readonly onDeploymentEnded?: (service: string) => Effect.Effect<void>

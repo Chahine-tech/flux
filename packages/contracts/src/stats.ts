@@ -2,7 +2,7 @@ import { Schema } from "effect"
 
 /**
  * Aggregations served by `GET /stats`, computed from the control plane's SQLite
- * read model (D12). These are the questions Temporal advanced visibility cannot
+ * read model. These are the questions Temporal advanced visibility cannot
  * answer — it lists and filters deployments but cannot `GROUP BY` or average —
  * which is the whole reason the read model exists.
  */

@@ -8,10 +8,10 @@ import type {
 import { TRACEPARENT_HEADER_KEY } from "./traceparent.ts"
 
 /**
- * Workflow-side half of D24: forwards the `traceparent` header the client set
+ * Workflow-side half: forwards the `traceparent` header the client set
  * on `execute` onto every activity the workflow schedules. Bundled into the
  * deterministic VM (`workflowInterceptorModules`), so — same discipline as
- * `deployment.workflow.ts` (D6) — this file must never import `effect`. It
+ * `deployment.workflow.ts` — this file must never import `effect`. It
  * only copies an opaque `Payload` through; no decoding needed here.
  *
  * Found empirically, not assumed: Temporal does **not** propagate a

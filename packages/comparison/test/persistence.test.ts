@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url"
 import { afterAll, describe, expect, it } from "vitest"
 
 /**
- * The D23 durability proof: the canary on `ClusterWorkflowEngine` +
+ * the durability proof: the canary on `ClusterWorkflowEngine` +
  * `SqlMessageStorage` (SQLite) survives a real `SIGKILL` mid-monitor and
  * resumes to completion in a fresh process — the Effect-side counterpart of
- * what D19's real-cluster CI proves for Temporal. Without this, the written
+ * what the real-cluster CI proves for Temporal. Without this, the written
  * comparison would assert durability on proof for one engine and on faith for
  * the other.
  *
@@ -60,7 +60,7 @@ const exited = (child: ChildProcess): Promise<void> =>
     ? Promise.resolve()
     : new Promise((resolve) => child.once("exit", () => resolve()))
 
-describe("durability (D23): ClusterWorkflowEngine over SQLite", () => {
+describe("durability: ClusterWorkflowEngine over SQLite", () => {
   it("survives SIGKILL mid-monitor and resumes to completion in a fresh process", async () => {
     const dir = mkdtempSync(join(tmpdir(), "flux-kill-proof-"))
     dirs.push(dir)

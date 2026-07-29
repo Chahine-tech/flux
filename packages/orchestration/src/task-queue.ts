@@ -1,15 +1,12 @@
 /**
- * Task-queue backlog introspection (N16/D34).
+ * Read a task queue's pending backlog and active poller count over the raw
+ * DescribeTaskQueue gRPC. That backlog is the signal the server uses to drive
+ * poller autoscaling, so it's handy to be able to look at it.
  *
- * Reads a task queue's pending backlog and active poller count via the raw
- * `DescribeTaskQueue` gRPC — the server-side signal that *drives* poller
- * autoscaling (see `pollerBehaviors` in the worker config). The high-level
- * Temporal client doesn't wrap this call, so it takes the `workflowService`
- * hanging off a Connection (`client.connection.workflowService`).
- *
- * The service is typed structurally — only the one method, and only the fields
- * read — so this module pulls no `@temporalio` runtime import into its callers
- * (the same tree-shaking discipline as the Nexus subpath).
+ * The high-level Temporal client doesn't expose this call, so we reach for the
+ * workflowService on a Connection (client.connection.workflowService). It's
+ * typed structurally here, just the one method and the two fields we read, so
+ * importing this doesn't drag the whole @temporalio runtime into the caller.
  */
 
 // temporal.api.enums.v1.TaskQueueType.TASK_QUEUE_TYPE_ACTIVITY

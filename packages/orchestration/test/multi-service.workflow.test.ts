@@ -8,7 +8,7 @@ import type { DeploymentActivities } from "../src/activities/types.ts"
 import { type DeploymentInput, type MultiServiceInput, type MultiServiceResult, SEARCH_ATTRIBUTES } from "../src/deployment-input.ts"
 
 /**
- * Multi-service parent workflow against a time-skipping Temporal server (N4/D13):
+ * Multi-service parent workflow against a time-skipping Temporal server:
  * it starts one real `deploymentWorkflow` child per service and coordinates them.
  * Activities are mocked so we test the parent's fan-out and fail-fast policy.
  */
@@ -91,7 +91,7 @@ describe("multiServiceDeployment", () => {
     expect(result.perService.every((entry) => entry.result.kind === "Succeeded")).toBe(true)
   })
 
-  it("fail-fast: one service failing aborts the in-flight siblings (N4)", async () => {
+  it("fail-fast: one service failing aborts the in-flight siblings", async () => {
     // A monitor that never returns on its own — the siblings sit in it until
     // aborted, while "api" fails its health check up front.
     const cancellableMonitor = async (): Promise<never> => {
