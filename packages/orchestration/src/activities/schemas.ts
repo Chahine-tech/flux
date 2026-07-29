@@ -33,7 +33,7 @@ export const MonitorStepParams = Schema.Struct({
 })
 
 export const NotifyParams = Schema.Struct({
-  kind: Schema.Literals(["started", "step-advanced", "rolled-back", "succeeded"]),
+  kind: Schema.Literals(["started", "step-advanced", "rolled-back", "succeeded", "rollback-failed"]),
   service: Identifier,
   message: Schema.String
 })

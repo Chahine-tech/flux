@@ -21,17 +21,38 @@ const config = Schema.decodeUnknownSync(DeploymentConfig)({
   ]
 })
 
+/** Narrow to the canary steps, failing the test if the strategy isn't canary. */
+const canarySteps = (input: ReturnType<typeof configToInput>) => {
+  if (input.strategy?.kind !== "canary") throw new Error("expected a canary strategy")
+  return input.strategy.steps
+}
+
 describe("configToInput", () => {
   it("converts Effect Durations to milliseconds", () => {
-    const input = configToInput(config)
-    expect(input.steps[0]?.monitorMs).toBe(300_000)
-    expect(input.steps[1]?.monitorMs).toBe(600_000)
-    expect(input.steps[1]?.approvalTimeoutMs).toBe(3_600_000)
+    const steps = canarySteps(configToInput(config))
+    expect(steps[0]?.monitorMs).toBe(300_000)
+    expect(steps[1]?.monitorMs).toBe(600_000)
+    expect(steps[1]?.approvalTimeoutMs).toBe(3_600_000)
   })
 
   it("omits approvalTimeoutMs when absent", () => {
-    const input = configToInput(config)
-    expect(input.steps[0]?.approvalTimeoutMs).toBeUndefined()
+    expect(canarySteps(configToInput(config))[0]?.approvalTimeoutMs).toBeUndefined()
+  })
+
+  it("maps a blue-green strategy, converting the bake shorthand (D32)", () => {
+    const bgConfig = Schema.decodeUnknownSync(DeploymentConfig)({
+      service: "api",
+      version: "v2.1.0",
+      previousVersion: "v2.0.8",
+      strategy: { _tag: "blue-green", bakeDuration: "10m", requiresApproval: true, approvalTimeout: "1h" },
+      thresholds: [{ name: "errorRate", query: "rate(http_errors[1m])", max: 0.01 }]
+    })
+    const input = configToInput(bgConfig)
+    expect(input.strategy?.kind).toBe("blue-green")
+    if (input.strategy?.kind !== "blue-green") throw new Error("expected blue-green")
+    expect(input.strategy.bakeMs).toBe(600_000)
+    expect(input.strategy.requiresApproval).toBe(true)
+    expect(input.strategy.approvalTimeoutMs).toBe(3_600_000)
   })
 
   it("carries service, versions and metric rules through unchanged", () => {

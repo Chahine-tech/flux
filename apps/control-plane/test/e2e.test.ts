@@ -43,10 +43,13 @@ const gatedRequest = {
   service: "api",
   version: "v2",
   previousVersion: "v1",
-  steps: [
-    { percent: 50, monitorMs: 0, requiresApproval: true },
-    { percent: 100, monitorMs: 0, requiresApproval: false }
-  ],
+  strategy: {
+    kind: "canary",
+    steps: [
+      { percent: 50, monitorMs: 0, requiresApproval: true },
+      { percent: 100, monitorMs: 0, requiresApproval: false }
+    ]
+  },
   rules: [{ name: "errorRate", query: "q", max: 0.01 }],
   pollIntervalMs: 100
 } as const

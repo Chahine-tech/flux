@@ -3,7 +3,7 @@ import type { NotifyFailed } from "../errors.ts"
 
 /** A deployment notification to deliver to an external channel. */
 export interface Notification {
-  readonly kind: "started" | "step-advanced" | "rolled-back" | "succeeded"
+  readonly kind: "started" | "step-advanced" | "rolled-back" | "succeeded" | "rollback-failed"
   readonly service: string
   readonly message: string
 }

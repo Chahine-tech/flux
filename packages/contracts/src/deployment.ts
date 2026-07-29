@@ -24,7 +24,7 @@ export const DeploymentPhase = Schema.Literals([
 export type DeploymentPhase = typeof DeploymentPhase.Type
 
 /** The terminal outcome kinds — used both as `outcome` and as a history filter. */
-export const ResultKind = Schema.Literals(["Succeeded", "RolledBack", "Aborted", "Failed"])
+export const ResultKind = Schema.Literals(["Succeeded", "RolledBack", "Aborted", "Failed", "RollbackFailed"])
 export type ResultKind = typeof ResultKind.Type
 
 /** Live canary state, exposed by the workflow `status` query and streamed on `watch`. */

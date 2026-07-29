@@ -28,5 +28,11 @@ export const Aborted = Schema.TaggedStruct("Aborted", {
   atPercent: Schema.Finite
 })
 
+// This union is the three "clean" business endings. Operational failures —
+// `Failed` (an activity failed) and `RollbackFailed` (D31, the rollback did not
+// restore health) — are not business outcomes; they live workflow-side on
+// `DeploymentResult` and the `ResultKind` contract. (`RollbackFailed` is also a
+// typed *error* in `errors.ts` — the activity-level failure — a distinct concept
+// from the terminal result kind.)
 export const DeploymentOutcome = Schema.Union([Succeeded, RolledBack, Aborted])
 export type DeploymentOutcome = typeof DeploymentOutcome.Type

@@ -31,6 +31,10 @@ The constraint I cared about is the split between Temporal and Effect:
 
 Rollback is a saga. The first traffic shift registers a compensation that puts
 the previous version back at 100%, and any ending that isn't a success runs it.
+A rollback then verifies itself: it re-checks the previous version is actually
+healthy again, and if the compensation couldn't restore traffic or that version
+stays down, the deployment ends in a louder `RollbackFailed` rather than
+pretending it recovered.
 
 ```
   flux deploy --service api --version v2
@@ -64,6 +68,12 @@ Choices that go past plumbing:
   service, mean canary duration — from a small SQLite read model.
 - A multi-service rollout is a parent workflow over one child per service, with a
   fail-fast policy that aborts the siblings if one goes bad.
+- The rollout shape is a strategy the workflow is polymorphic over. Canary shifts
+  traffic in steps; blue/green flips 100% at once after a health check and bakes,
+  rolling back with a single shift because the old version was never scaled down.
+  Same activities, same ports, same saga — only the workflow's branch differs.
+  Adding it needed no `workflow.patched()`: the branch is chosen by the input, so
+  histories recorded before it still take the identical canary path.
 - An abort cancels the in-flight monitor immediately (a `CancellationScope`)
   instead of waiting out the window.
 - The router port has two deliberately opposite implementations — nginx renders

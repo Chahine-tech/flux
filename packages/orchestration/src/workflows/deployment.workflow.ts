@@ -17,7 +17,14 @@ import {
   workflowInfo
 } from "@temporalio/workflow"
 import type { DeploymentActivities } from "../activities/types.ts"
-import { type DeploymentInput, type DeploymentResult, type DeploymentState, SEARCH_ATTRIBUTES } from "../deployment-input.ts"
+import {
+  type DeploymentInput,
+  type DeploymentResult,
+  type DeploymentState,
+  type DeploymentStepInput,
+  type DeploymentStrategy,
+  SEARCH_ATTRIBUTES
+} from "../deployment-input.ts"
 
 /**
  * Canary deployment workflow — deterministic, plain TypeScript, ZERO Effect.
@@ -87,6 +94,13 @@ const asApplicationFailure = (error: unknown): ApplicationFailure | undefined =>
 }
 
 export async function deploymentWorkflow(input: DeploymentInput): Promise<DeploymentResult> {
+  // Normalize the strategy (D32). Histories recorded before D32 carry a top-level
+  // `steps` array and no `strategy`, so they fall back to `canary` with those
+  // steps and replay through the identical command sequence — no `patched()`
+  // needed, because the path is selected by input data, not by a code change for
+  // the same input.
+  const strategy: DeploymentStrategy = input.strategy ?? { kind: "canary", steps: input.steps ?? [] }
+
   // Set when this run resumed from a continue-as-new mid-rollout (N4/D16).
   const resume = input.resumeFrom
   const completedBefore = resume?.completedSteps ?? 0
@@ -97,7 +111,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
     version: input.version,
     currentPercent: resume?.lastPercent ?? 0,
     stepIndex: completedBefore,
-    totalSteps: completedBefore + input.steps.length
+    totalSteps: strategy.kind === "canary" ? completedBefore + strategy.steps.length : 1
   }
   let aborted = false
   let approved = false
@@ -106,16 +120,21 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
 
   // Saga: undo actions to run (LIFO) on any non-success termination.
   const compensations: Array<() => Promise<void>> = []
-  const compensate = async (): Promise<void> => {
+  // Returns whether every undo succeeded — a failed undo means traffic may be
+  // stranded on the bad version, which the breach path escalates (D31).
+  const compensate = async (): Promise<boolean> => {
     state = { ...state, phase: "rolling-back" }
+    let restored = true
     while (compensations.length > 0) {
       const undo = compensations.pop()!
       try {
         await undo()
       } catch (error) {
+        restored = false
         log.error("compensation failed", { error: String(error) })
       }
     }
+    return restored
   }
 
   upsertSearchAttributes({
@@ -151,7 +170,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
 
   let result: DeploymentResult
   try {
-    result = await runCanary()
+    result = strategy.kind === "canary" ? await runCanary(strategy.steps) : await runBlueGreen(strategy)
   } catch (error) {
     const failure = asApplicationFailure(error)
     if (failure === undefined) {
@@ -171,7 +190,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
   await acts.recordOutcome(result.kind)
   return result
 
-  async function runCanary(): Promise<DeploymentResult> {
+  async function runCanary(steps: ReadonlyArray<DeploymentStepInput>): Promise<DeploymentResult> {
     // 0. Announce the deployment (D26). The `started` notification always
     //    existed in the Notification contract but was never sent — added
     //    behind `patched()` because inserting an activity changes the command
@@ -185,7 +204,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       await acts.notify({
         kind: "started",
         service: input.service,
-        message: `deploying ${input.version} (canary over ${input.steps.length} steps)`
+        message: `deploying ${input.version} (canary over ${steps.length} steps)`
       })
     }
 
@@ -202,8 +221,8 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
 
     // 2. Progressive canary steps.
     let lastPercent = resume?.lastPercent ?? 0
-    for (let stepIndex = 0; stepIndex < input.steps.length; stepIndex++) {
-      const step = input.steps[stepIndex]!
+    for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+      const step = steps[stepIndex]!
       if (aborted) {
         await compensate()
         return { kind: "Aborted", service: input.service, atPercent: lastPercent }
@@ -254,41 +273,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       }
 
       if (evaluation._tag === "Breached") {
-        log.warn("threshold breached, rolling back", { atPercent: step.percent })
-        await compensate()
-        await acts.notify({
-          kind: "rolled-back",
-          service: input.service,
-          message: `regression at ${step.percent}% — rolled back to ${input.previousVersion}`
-        })
-        // Draft an LLM postmortem of the breach (D30). Behind `patched()` for the
-        // same reason the `started` notification is (D26): scheduling an activity
-        // on the rollback path changes the command sequence, so a rollback
-        // history recorded before this edit must keep replaying through the
-        // else-branch — the committed `rollback.json` fixture proves it does. The
-        // activity swallows its own failures; this guard only covers a worker
-        // crash or the 30s deadline, neither of which should turn a clean
-        // rollback into a Failed.
-        if (patched("rollback-postmortem")) {
-          try {
-            await postmortemActs.postmortem({
-              service: input.service,
-              version: input.version,
-              previousVersion: input.previousVersion,
-              atPercent: step.percent,
-              breaches: evaluation.breaches
-            })
-          } catch (error) {
-            log.warn("postmortem activity failed", { error: String(error) })
-          }
-        }
-        return {
-          kind: "RolledBack",
-          service: input.service,
-          toVersion: input.previousVersion,
-          atPercent: step.percent,
-          breaches: evaluation.breaches
-        }
+        return await handleBreach(step.percent, evaluation.breaches)
       }
 
       // 3. Optional manual-approval gate.
@@ -304,13 +289,15 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
 
       // 4. Bound history: continue-as-new with the remaining steps when Temporal
       //    suggests it (long history) or an explicit step bound is reached.
-      const isLastStep = stepIndex === input.steps.length - 1
+      const isLastStep = stepIndex === steps.length - 1
       const reachedBound = input.continueAsNewAfterSteps !== undefined &&
         stepIndex + 1 >= input.continueAsNewAfterSteps
       if (!isLastStep && (workflowInfo().continueAsNewSuggested || reachedBound)) {
         await continueAsNew<typeof deploymentWorkflow>({
           ...input,
-          steps: input.steps.slice(stepIndex + 1),
+          // Carry the remaining steps forward as the canary strategy (the mapper
+          // never sets the legacy top-level `steps`, so `...input` doesn't either).
+          strategy: { kind: "canary", steps: steps.slice(stepIndex + 1) },
           resumeFrom: {
             completedSteps: completedBefore + stepIndex + 1,
             trafficShifted: compensations.length > 0,
@@ -321,6 +308,146 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
     }
 
     // 5. Full rollout succeeded — commit (drop compensations, keep new version live).
+    compensations.length = 0
+    await acts.notify({ kind: "succeeded", service: input.service, message: input.version })
+    return { kind: "Succeeded", service: input.service, version: input.version }
+  }
+
+  // The rollback path shared by both strategies (D31/D32): compensate, verify the
+  // previous version is healthy again, notify, draft a postmortem, and return
+  // `RolledBack` or the louder `RollbackFailed`. Extracting it keeps the two
+  // strategies' breach handling identical — and the command sequence unchanged
+  // for the committed canary histories.
+  async function handleBreach(
+    atPercent: number,
+    breaches: ReadonlyArray<{ readonly metric: string; readonly observed: number; readonly limit: number }>
+  ): Promise<DeploymentResult> {
+    log.warn("threshold breached, rolling back", { atPercent })
+    const restored = await compensate()
+
+    let rollbackFailed = false
+    let rollbackFailureReason = ""
+    if (patched("verify-rollback")) {
+      if (!restored) {
+        rollbackFailed = true
+        rollbackFailureReason = "compensation failed — traffic may be stranded on the bad version"
+      } else {
+        try {
+          await localActs.healthCheck({ service: input.service, version: input.previousVersion })
+        } catch {
+          rollbackFailed = true
+          rollbackFailureReason = `previous version ${input.previousVersion} is not healthy after rollback`
+        }
+      }
+    }
+
+    await acts.notify({
+      kind: rollbackFailed ? "rollback-failed" : "rolled-back",
+      service: input.service,
+      message: rollbackFailed
+        ? `rollback to ${input.previousVersion} did NOT restore health — needs attention`
+        : `regression at ${atPercent}% — rolled back to ${input.previousVersion}`
+    })
+
+    if (patched("rollback-postmortem")) {
+      try {
+        await postmortemActs.postmortem({
+          service: input.service,
+          version: input.version,
+          previousVersion: input.previousVersion,
+          atPercent,
+          breaches
+        })
+      } catch (error) {
+        log.warn("postmortem activity failed", { error: String(error) })
+      }
+    }
+
+    if (rollbackFailed) {
+      return {
+        kind: "RollbackFailed",
+        service: input.service,
+        version: input.version,
+        toVersion: input.previousVersion,
+        atPercent,
+        reason: rollbackFailureReason
+      }
+    }
+    return {
+      kind: "RolledBack",
+      service: input.service,
+      toVersion: input.previousVersion,
+      atPercent,
+      breaches
+    }
+  }
+
+  // Blue/green (D32): deploy the new version alongside the old, health-check it,
+  // then flip 100% at once (optionally behind an approval) and bake. Because the
+  // old version is never scaled down, a breach rolls back with a single shift.
+  async function runBlueGreen(
+    bg: Extract<DeploymentStrategy, { readonly kind: "blue-green" }>
+  ): Promise<DeploymentResult> {
+    if (patched("notify-deployment-started")) {
+      await acts.notify({ kind: "started", service: input.service, message: `deploying ${input.version} (blue/green)` })
+    }
+
+    // 1. Health-check the new (green) version before any cutover.
+    await localActs.healthCheck({ service: input.service, version: input.version })
+    if (aborted) {
+      return { kind: "Aborted", service: input.service, atPercent: 0 }
+    }
+
+    // 2. Optional approval before the flip.
+    if (bg.requiresApproval) {
+      state = { ...state, phase: "awaiting-approval" }
+      await condition(() => approved || aborted, bg.approvalTimeoutMs)
+      if (aborted) {
+        return { kind: "Aborted", service: input.service, atPercent: 0 }
+      }
+      approved = false
+    }
+
+    // 3. Flip 100% at once (no split); arm the instant rollback.
+    state = { ...state, phase: "shifting", currentPercent: 100, stepIndex: 0 }
+    await acts.setTrafficWeight({
+      service: input.service,
+      version: input.version,
+      weight: 100,
+      previousVersion: input.previousVersion
+    })
+    compensations.push(() =>
+      acts.setTrafficWeight({ service: input.service, version: input.previousVersion, weight: 100 }))
+
+    // 4. Bake: one monitor over the bake window, cancellable by an abort.
+    state = { ...state, phase: "monitoring" }
+    const monitorScope = new CancellationScope()
+    cancelMonitor = () => monitorScope.cancel()
+    let evaluation: Awaited<ReturnType<DeploymentActivities["monitorStep"]>>
+    try {
+      evaluation = await monitorScope.run(() =>
+        monitorActs.monitorStep({
+          service: input.service,
+          version: input.version,
+          windowMs: bg.bakeMs,
+          pollIntervalMs: input.pollIntervalMs,
+          rules: input.rules
+        }))
+    } catch (error) {
+      if (aborted && isCancellation(error)) {
+        await compensate()
+        return { kind: "Aborted", service: input.service, atPercent: 100 }
+      }
+      throw error
+    } finally {
+      cancelMonitor = undefined
+    }
+
+    if (evaluation._tag === "Breached") {
+      return await handleBreach(100, evaluation.breaches)
+    }
+
+    // 5. Bake passed — commit.
     compensations.length = 0
     await acts.notify({ kind: "succeeded", service: input.service, message: input.version })
     return { kind: "Succeeded", service: input.service, version: input.version }

@@ -22,13 +22,32 @@ export const DeploymentStep = Schema.Struct({
 })
 export type DeploymentStep = typeof DeploymentStep.Type
 
+/**
+ * The rollout strategy on the wire (D32), a discriminated union on `kind` that
+ * matches the workflow's `DeploymentStrategy`: `canary` carries its steps;
+ * `blue-green` carries a bake window and an optional approval.
+ */
+export const StrategyInput = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("canary"),
+    steps: Schema.NonEmptyArray(DeploymentStep)
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("blue-green"),
+    bakeMs: NonNegative,
+    requiresApproval: Schema.Boolean,
+    approvalTimeoutMs: Schema.optionalKey(NonNegative)
+  })
+])
+export type StrategyInput = typeof StrategyInput.Type
+
 export const TriggerDeploymentRequest = Schema.Struct({
   // `Identifier`, not just non-empty: these are interpolated into nginx config
   // and PromQL by the adapters, so the charset is locked down at the boundary.
   service: Identifier,
   version: Identifier,
   previousVersion: Identifier,
-  steps: Schema.NonEmptyArray(DeploymentStep),
+  strategy: StrategyInput,
   rules: Thresholds,
   pollIntervalMs: Schema.Finite.check(Schema.isGreaterThan(0)),
   /**

@@ -60,7 +60,24 @@ export const CanaryStrategy = Schema.TaggedStruct("canary", {
 })
 export type CanaryStrategy = typeof CanaryStrategy.Type
 
-export const Strategy = Schema.Union([CanaryStrategy])
+/**
+ * Blue/green: the new version is deployed alongside the old, health-checked,
+ * then traffic flips 100% at once (no split) after an optional approval. It
+ * bakes for `bakeDuration`; a breach flips back instantly, since the old
+ * version was never scaled down. The counterpoint to canary's gradual shift —
+ * faster cutover and rollback, no intermediate exposure, but all-or-nothing.
+ */
+export const BlueGreenStrategy = Schema.TaggedStruct("blue-green", {
+  /** How long to monitor after the flip before declaring success. */
+  bakeDuration: DurationFromShorthand,
+  /** Whether the flip pauses for manual approval first. */
+  requiresApproval: Schema.Boolean,
+  /** How long to wait for that approval before timing out. */
+  approvalTimeout: Schema.optionalKey(DurationFromShorthand)
+})
+export type BlueGreenStrategy = typeof BlueGreenStrategy.Type
+
+export const Strategy = Schema.Union([CanaryStrategy, BlueGreenStrategy])
 export type Strategy = typeof Strategy.Type
 
 /** The full, normalized configuration for a single deployment run. */

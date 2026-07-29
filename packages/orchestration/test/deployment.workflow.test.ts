@@ -126,6 +126,84 @@ describe("deploymentWorkflow", () => {
     }
   })
 
+  it("escalates to RollbackFailed when the previous version is unhealthy after rollback (D31)", async () => {
+    let step = 0
+    const notifications: Array<string> = []
+    const result = await run({
+      ...okActivities(),
+      // The new version passes its pre-shift probe; the *previous* version fails
+      // the post-rollback verification, so the rollback did not restore health.
+      healthCheck: async (params: { version: string }) => {
+        if (params.version === "v2.0.8") throw new Error("previous version is down")
+      },
+      monitorStep: async () =>
+        (++step >= 2
+          ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] }
+          : { _tag: "Within" }),
+      notify: async (n: { kind: string }) => {
+        notifications.push(n.kind)
+      }
+    })
+    expect(result.kind).toBe("RollbackFailed")
+    if (result.kind === "RollbackFailed") {
+      expect(result.toVersion).toBe("v2.0.8")
+      expect(result.version).toBe("v2.1.0")
+      expect(result.atPercent).toBe(50)
+      expect(result.reason).toContain("v2.0.8")
+    }
+    // The operator gets the loud notification, not the ordinary rolled-back one.
+    expect(notifications).toContain("rollback-failed")
+    expect(notifications).not.toContain("rolled-back")
+  })
+
+  // Blue/green (D32): one flip to 100%, a bake, then success — or an instant
+  // rollback on a breach. The same activities and ports as the canary; only the
+  // shape of the rollout differs.
+  const blueGreenInput: DeploymentInput = {
+    service: "api",
+    version: "v2.1.0",
+    previousVersion: "v2.0.8",
+    strategy: { kind: "blue-green", bakeMs: 0, requiresApproval: false },
+    rules: [{ name: "errorRate", query: "q", max: 0.01 }],
+    pollIntervalMs: 100
+  }
+
+  it("blue/green: flips to 100% and succeeds when the bake stays within budget (D32)", async () => {
+    const shifts: Array<{ version: string; weight: number }> = []
+    const result = await run({
+      ...okActivities(),
+      setTrafficWeight: async (p: { version: string; weight: number }) => {
+        shifts.push({ version: p.version, weight: p.weight })
+      }
+    }, blueGreenInput)
+    expect(result.kind).toBe("Succeeded")
+    // A single atomic flip to the new version at 100% — no intermediate percentages.
+    expect(shifts).toEqual([{ version: "v2.1.0", weight: 100 }])
+  })
+
+  it("runs a steps-only input (no strategy field) as canary — D32 back-compat", async () => {
+    // `baseInput` carries top-level `steps` and no `strategy`; the workflow must
+    // normalize it to a canary, which is what keeps pre-D32 histories replaying.
+    expect(baseInput.strategy).toBeUndefined()
+    const result = await run(okActivities(), baseInput)
+    expect(result.kind).toBe("Succeeded")
+  })
+
+  it("blue/green: rolls back instantly when the bake breaches (D32)", async () => {
+    const result = await run({
+      ...okActivities(),
+      monitorStep: async () => ({
+        _tag: "Breached",
+        breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }]
+      })
+    }, blueGreenInput)
+    expect(result.kind).toBe("RolledBack")
+    if (result.kind === "RolledBack") {
+      expect(result.atPercent).toBe(100)
+      expect(result.toVersion).toBe("v2.0.8")
+    }
+  })
+
   it("parks at an approval gate, reflects it in the query, and advances on approve", async () => {
     const input: DeploymentInput = {
       ...baseInput,

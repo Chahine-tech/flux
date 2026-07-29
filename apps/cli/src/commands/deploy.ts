@@ -25,6 +25,14 @@ export const deploy = Command.make("deploy", {
     Flag.withDefault("30s"),
     Flag.withDescription("Monitoring window per canary step")
   ),
+  strategy: Flag.string("strategy").pipe(
+    Flag.withDefault("canary"),
+    Flag.withDescription('Rollout strategy: "canary" (default) or "blue-green" (D32)')
+  ),
+  bake: Flag.string("bake").pipe(
+    Flag.withDefault("30s"),
+    Flag.withDescription("Bake window after the blue/green flip (only for --strategy blue-green)")
+  ),
   window: Flag.string("window").pipe(
     Flag.optional,
     Flag.withDescription('Only deploy inside this cron window, e.g. "* 9-17 * * 1-5" (N11/D28)')
@@ -39,14 +47,16 @@ export const deploy = Command.make("deploy", {
       service: config.service,
       version: config.version,
       previousVersion: config.previousVersion,
-      strategy: {
-        _tag: "canary",
-        steps: [
-          { percent: 10, monitorDuration: config.monitor, requiresApproval: false },
-          { percent: 50, monitorDuration: config.monitor, requiresApproval: false },
-          { percent: 100, monitorDuration: "0s", requiresApproval: false }
-        ]
-      },
+      strategy: config.strategy === "blue-green"
+        ? { _tag: "blue-green", bakeDuration: config.bake, requiresApproval: false }
+        : {
+          _tag: "canary",
+          steps: [
+            { percent: 10, monitorDuration: config.monitor, requiresApproval: false },
+            { percent: 50, monitorDuration: config.monitor, requiresApproval: false },
+            { percent: 100, monitorDuration: "0s", requiresApproval: false }
+          ]
+        },
       thresholds: [
         { name: "errorRate", query: PrometheusMetrics.errorRateQuery(config.service), max: 0.01 },
         { name: "p99", query: PrometheusMetrics.p99LatencyQuery(config.service), max: 500 }
@@ -64,7 +74,9 @@ export const deploy = Command.make("deploy", {
     const { workflowId } = yield* client.deployments.trigger({ payload })
 
     yield* Console.log(
-      `[flux] started deployment ${workflowId} — ${config.service} → ${config.version} (canary 10→50→100)`
+      `[flux] started deployment ${workflowId} — ${config.service} → ${config.version} (${
+        config.strategy === "blue-green" ? "blue/green" : "canary 10→50→100"
+      })`
     )
   }).pipe(
     Effect.provide(clientLayer),

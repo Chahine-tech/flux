@@ -77,11 +77,14 @@ const demoInput: DeploymentInput = {
   service: "api",
   version: "v2.1.0",
   previousVersion: "v2.0.8",
-  steps: [
-    { percent: 10, monitorMs: 300, requiresApproval: false },
-    { percent: 50, monitorMs: 300, requiresApproval: false },
-    { percent: 100, monitorMs: 0, requiresApproval: false }
-  ],
+  strategy: {
+    kind: "canary",
+    steps: [
+      { percent: 10, monitorMs: 300, requiresApproval: false },
+      { percent: 50, monitorMs: 300, requiresApproval: false },
+      { percent: 100, monitorMs: 0, requiresApproval: false }
+    ]
+  },
   // Two rules share the same query -> deduped to one fetch per poll.
   rules: [
     { name: "errorRate", query: "flux_demo_error_rate", max: 0.01 },

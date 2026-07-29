@@ -51,7 +51,7 @@ const WORKFLOW_TYPE = "deploymentWorkflow"
 export interface ClosedDeployment {
   readonly workflowId: string
   readonly service: string
-  /** Business outcome from the `FluxStatus` search attribute (Succeeded/RolledBack/Aborted/Failed). */
+  /** Business outcome from the `FluxStatus` search attribute (Succeeded/RolledBack/Aborted/Failed/RollbackFailed). */
   readonly status: string
   readonly durationMs: number
 }

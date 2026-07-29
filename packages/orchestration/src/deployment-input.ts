@@ -23,11 +23,34 @@ export interface DeploymentStepInput {
   readonly approvalTimeoutMs?: number
 }
 
+/**
+ * The rollout strategy the workflow runs (D32). A discriminated union so the
+ * workflow branches on `kind`: `canary` shifts traffic gradually across steps;
+ * `blue-green` flips 100% at once after a health check and bakes.
+ */
+export type DeploymentStrategy =
+  | { readonly kind: "canary"; readonly steps: ReadonlyArray<DeploymentStepInput> }
+  | {
+    readonly kind: "blue-green"
+    readonly bakeMs: number
+    readonly requiresApproval: boolean
+    readonly approvalTimeoutMs?: number
+  }
+
 export interface DeploymentInput {
   readonly service: string
   readonly version: string
   readonly previousVersion: string
-  readonly steps: ReadonlyArray<DeploymentStepInput>
+  /**
+   * The rollout strategy (D32). Optional so two things keep working: histories
+   * recorded before D32 (which carry a top-level `steps` array and no
+   * `strategy`), and callers that pass `steps` as a canary shorthand. When
+   * absent, the workflow normalizes to `{ kind: "canary", steps }` — an identical
+   * command sequence, which is what keeps the committed histories replaying.
+   */
+  readonly strategy?: DeploymentStrategy
+  /** Canary steps as a top-level shorthand / pre-D32 back-compat — the `strategy` fallback. */
+  readonly steps?: ReadonlyArray<DeploymentStepInput>
   readonly rules: ReadonlyArray<DeploymentRule>
   /** How often each step samples metrics while monitoring, in milliseconds. */
   readonly pollIntervalMs: number
@@ -140,3 +163,11 @@ export type DeploymentResult =
   }
   | { readonly kind: "Aborted"; readonly service: string; readonly atPercent: number }
   | { readonly kind: "Failed"; readonly service: string; readonly reason: string }
+  | {
+    readonly kind: "RollbackFailed"
+    readonly service: string
+    readonly version: string
+    readonly toVersion: string
+    readonly atPercent: number
+    readonly reason: string
+  }

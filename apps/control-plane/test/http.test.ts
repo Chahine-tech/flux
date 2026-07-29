@@ -95,7 +95,7 @@ const validTrigger = {
   service: "checkout",
   version: "v2",
   previousVersion: "v1",
-  steps: [{ percent: 10, monitorMs: 60_000, requiresApproval: false }],
+  strategy: { kind: "canary", steps: [{ percent: 10, monitorMs: 60_000, requiresApproval: false }] },
   rules: [{ name: "error_rate", query: "sum(rate(errors[1m]))", max: 0.01 }],
   pollIntervalMs: 5_000
 } as const

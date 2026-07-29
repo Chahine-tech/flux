@@ -27,10 +27,22 @@ describe("DeploymentConfig", () => {
   it("decodes a full canary config, turning shorthands into Durations", () => {
     const config = decode(valid)
     expect(config.strategy._tag).toBe("canary")
+    if (config.strategy._tag !== "canary") throw new Error("expected canary")
     const [first, second] = config.strategy.steps
     expect(config.strategy.steps).toHaveLength(3)
     expect(Duration.toMillis(first.monitorDuration)).toBe(300_000)
     expect(second?.approvalTimeout).toBeDefined()
+  })
+
+  it("decodes a blue-green config, turning the bake shorthand into a Duration (D32)", () => {
+    const config = decode({
+      ...valid,
+      strategy: { _tag: "blue-green", bakeDuration: "10m", requiresApproval: true, approvalTimeout: "1h" }
+    })
+    expect(config.strategy._tag).toBe("blue-green")
+    if (config.strategy._tag !== "blue-green") throw new Error("expected blue-green")
+    expect(Duration.toMillis(config.strategy.bakeDuration)).toBe(600_000)
+    expect(config.strategy.requiresApproval).toBe(true)
   })
 
   it("rejects an out-of-range percent", () => {

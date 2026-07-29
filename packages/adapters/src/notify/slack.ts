@@ -13,7 +13,8 @@ const ICONS: Record<Notification["kind"], string> = {
   "started": "🚀",
   "step-advanced": "📈",
   "rolled-back": "⚠️",
-  "succeeded": "✅"
+  "succeeded": "✅",
+  "rollback-failed": "🚨"
 }
 
 /** Build the Slack message payload for a notification. */

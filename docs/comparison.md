@@ -133,8 +133,11 @@ engage at all. Two consequences, one in each direction:
   `ActivityFailure` surfaces at runtime.
 - **Against**: a compensation's own failure has nowhere typed to go. Its
   signature is `Effect<void, never, R>`, so a failed rollback becomes a defect.
-  Temporal-side flux models `RollbackFailed` as a first-class, page-someone
-  outcome. The same failure mode is structurally worse off on the Effect side.
+  Temporal-side flux makes `RollbackFailed` a real, page-someone terminal
+  outcome (D31): after compensating it re-probes the previous version's health,
+  and a compensation that threw or a version that stays down ends the workflow
+  in `RollbackFailed`, not silently in `RolledBack`. The same failure mode is
+  structurally worse off on the Effect side.
 
 Granularity also differs: Temporal-side flux registers the rollback
 compensation once, at the first traffic divergence; `withCompensation` wraps
