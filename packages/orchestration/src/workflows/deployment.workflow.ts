@@ -55,6 +55,14 @@ const localActs = proxyLocalActivities<Pick<DeploymentActivities, "healthCheck">
   retry: { maximumAttempts: 3 }
 })
 
+// The rollback postmortem (D30) is best-effort colour on top of a completed
+// rollback: a short deadline and a single attempt so a slow or absent LLM can
+// never stretch out the rollback path.
+const postmortemActs = proxyActivities<Pick<DeploymentActivities, "postmortem">>({
+  startToCloseTimeout: "30 seconds",
+  retry: { maximumAttempts: 1 }
+})
+
 /** Approve advancing past a manual-approval gate (rejected if none is open). */
 export const approveUpdate = defineUpdate<void, []>("approve")
 /** Abort an in-flight deployment (rejected once it has finished). */
@@ -253,6 +261,27 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
           service: input.service,
           message: `regression at ${step.percent}% — rolled back to ${input.previousVersion}`
         })
+        // Draft an LLM postmortem of the breach (D30). Behind `patched()` for the
+        // same reason the `started` notification is (D26): scheduling an activity
+        // on the rollback path changes the command sequence, so a rollback
+        // history recorded before this edit must keep replaying through the
+        // else-branch — the committed `rollback.json` fixture proves it does. The
+        // activity swallows its own failures; this guard only covers a worker
+        // crash or the 30s deadline, neither of which should turn a clean
+        // rollback into a Failed.
+        if (patched("rollback-postmortem")) {
+          try {
+            await postmortemActs.postmortem({
+              service: input.service,
+              version: input.version,
+              previousVersion: input.previousVersion,
+              atPercent: step.percent,
+              breaches: evaluation.breaches
+            })
+          } catch (error) {
+            log.warn("postmortem activity failed", { error: String(error) })
+          }
+        }
         return {
           kind: "RolledBack",
           service: input.service,

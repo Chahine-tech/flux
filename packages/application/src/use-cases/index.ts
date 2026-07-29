@@ -1,5 +1,6 @@
 export * from "./health-check.ts"
 export * from "./monitor-step.ts"
 export * from "./notify.ts"
+export * from "./postmortem.ts"
 export * from "./read-router-state.ts"
 export * from "./shift-traffic.ts"

@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Identifier, Thresholds } from "@flux/domain"
+import { Identifier, ThresholdBreach, Thresholds } from "@flux/domain"
 
 /**
  * Schemas for the values that cross the Temporal wire into an activity.
@@ -40,4 +40,12 @@ export const NotifyParams = Schema.Struct({
 
 export const ReadRouterStateParams = Schema.Struct({
   service: Identifier
+})
+
+export const PostmortemParams = Schema.Struct({
+  service: Identifier,
+  version: Identifier,
+  previousVersion: Identifier,
+  atPercent: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+  breaches: Schema.Array(ThresholdBreach)
 })

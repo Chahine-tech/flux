@@ -36,3 +36,12 @@ export class NotifyFailed extends Schema.TaggedErrorClass<NotifyFailed>()(
     reason: Schema.String
   }
 ) {}
+
+/** The changelog source could not be reached, or has no history for the versions. */
+export class ChangelogUnavailable extends Schema.TaggedErrorClass<ChangelogUnavailable>()(
+  "ChangelogUnavailable",
+  {
+    service: Schema.String,
+    reason: Schema.String
+  }
+) {}

@@ -20,7 +20,8 @@ const baseActivities = (): DeploymentActivities => ({
   monitorStep: async () => ({ _tag: "Within" }),
   notify: async () => {},
   readRouterState: async () => [],
-  recordOutcome: async () => {}
+  recordOutcome: async () => {},
+  postmortem: async () => {}
 })
 
 let env: TestWorkflowEnvironment

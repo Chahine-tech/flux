@@ -1,7 +1,15 @@
 import { Effect, Layer, ManagedRuntime, Option, Redacted } from "effect"
 import { Otlp } from "effect/unstable/observability"
 import { NodeChildProcessSpawner, NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node"
-import { CaddyRouter, HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/adapters"
+import {
+  AnthropicLanguageModel,
+  CaddyRouter,
+  GitHubChangelog,
+  HttpHealth,
+  NginxRouter,
+  PrometheusMetrics,
+  SlackNotify
+} from "@flux/adapters"
 import { fluxConfig, type FluxConfig, layerFromToml } from "@flux/config"
 import type { AppServices } from "@flux/orchestration"
 
@@ -82,6 +90,20 @@ const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
       }),
       SlackNotify.layer({
         webhookUrl: Option.getOrElse(config.notifications.slackWebhook, () => Redacted.make(""))
+      }),
+      // The LanguageModel port (D30) for the rollback postmortem. An empty key
+      // (the default) makes it no-op without a network call.
+      AnthropicLanguageModel.layer({
+        apiKey: config.ai.anthropicApiKey,
+        model: config.ai.model,
+        baseUrl: config.ai.baseUrl
+      }),
+      // What grounds that postmortem: the commits between the two versions. An
+      // empty repo template disables it and the postmortem stays metrics-only.
+      GitHubChangelog.layer({
+        repoTemplate: config.changelog.repoTemplate,
+        token: config.changelog.githubToken,
+        baseUrl: config.changelog.baseUrl
       }),
       routerLayer(config)
     ).pipe(Layer.provide(PlatformLayer))

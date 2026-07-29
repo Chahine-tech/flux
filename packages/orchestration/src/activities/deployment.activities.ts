@@ -1,16 +1,35 @@
 import { Duration, Effect, type ManagedRuntime, Schema } from "effect"
-import type { HealthPort, MetricsPort, NotifyPort, RouterPort } from "@flux/application"
-import { healthCheck, monitorStep, notify, readRouterState, shiftTraffic } from "@flux/application"
+import type { LanguageModel } from "effect/unstable/ai"
+import type { ChangelogPort, HealthPort, MetricsPort, NotifyPort, RouterPort } from "@flux/application"
+import { healthCheck, monitorStep, notify, postmortem, readRouterState, shiftTraffic } from "@flux/application"
 import { Context as ActivityContext } from "@temporalio/activity"
 import { ApplicationFailure } from "@temporalio/common"
 import { recordOutcome, recordTrafficShift } from "../metrics.ts"
 import { currentActivityTraceParent } from "../tracing/activity-interceptor.ts"
 import { type FluxError, toApplicationFailure } from "./activity-error.ts"
-import { HealthCheckParams, MonitorStepParams, NotifyParams, ReadRouterStateParams, SetTrafficWeightParams } from "./schemas.ts"
+import {
+  HealthCheckParams,
+  MonitorStepParams,
+  NotifyParams,
+  PostmortemParams,
+  ReadRouterStateParams,
+  SetTrafficWeightParams
+} from "./schemas.ts"
 import type { DeploymentActivities } from "./types.ts"
 
-/** Services the worker's ManagedRuntime must provide (the 4 ports). */
-export type AppServices = HealthPort | MetricsPort | NotifyPort | RouterPort
+/**
+ * Services the worker's ManagedRuntime must provide: the 4 hand-written ports
+ * plus, for the rollback postmortem (D30), the abstract `LanguageModel` and the
+ * `ChangelogPort` that grounds it — satisfied by the Anthropic + GitHub adapters
+ * in the worker, and by disabled stubs elsewhere.
+ */
+export type AppServices =
+  | HealthPort
+  | MetricsPort
+  | NotifyPort
+  | RouterPort
+  | LanguageModel.LanguageModel
+  | ChangelogPort
 
 /** The deployment's business id (`dep-service-…`), from the activity's Temporal context. */
 const currentDeploymentId = (): string | undefined => {
@@ -111,6 +130,7 @@ export const createActivities = (
   const decodeMonitor = Schema.decodeUnknownEffect(MonitorStepParams)
   const decodeNotify = Schema.decodeUnknownEffect(NotifyParams)
   const decodeReadState = Schema.decodeUnknownEffect(ReadRouterStateParams)
+  const decodePostmortem = Schema.decodeUnknownEffect(PostmortemParams)
 
   return {
     healthCheck: (params) => validated(decodeHealth, params, (p) => linkToDeployment(healthCheck(p))),
@@ -145,6 +165,23 @@ export const createActivities = (
       validated(decodeReadState, params, (p) => linkToDeployment(readRouterState(p.service))),
 
     // Metric updates cannot fail (in-memory), so they skip validation/mapping.
-    recordOutcome: (outcome) => runtime.runPromise(recordOutcome(outcome))
+    recordOutcome: (outcome) => runtime.runPromise(recordOutcome(outcome)),
+
+    // Best-effort by construction: the whole pipeline is folded down to `void`,
+    // so a Schema decode failure, a missing API key, or a provider error all end
+    // as a log line rather than a rejected activity. The postmortem runs after
+    // the rollback has already completed; it must never be able to disturb it.
+    postmortem: (params) =>
+      runtime.runPromise(
+        linkToDeployment(
+          decodePostmortem(params).pipe(
+            Effect.flatMap((p) => postmortem(p)),
+            Effect.tap((analysis) => Effect.logInfo(`rollback postmortem: ${analysis}`)),
+            Effect.catch((error) =>
+              Effect.logWarning(`postmortem skipped: ${error instanceof Error ? error.message : String(error)}`)),
+            Effect.asVoid
+          )
+        )
+      )
   }
 }

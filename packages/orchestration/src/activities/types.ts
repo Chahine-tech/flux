@@ -41,4 +41,17 @@ export interface DeploymentActivities {
 
   /** Record the terminal outcome of a deployment for self-instrumentation. */
   recordOutcome(outcome: string): Promise<void>
+
+  /**
+   * Draft an LLM rollback postmortem (D30). Best-effort: it logs the analysis
+   * (correlated to the deployment) and never rejects, so a missing API key or a
+   * provider hiccup can't disturb a rollback that has already completed.
+   */
+  postmortem(params: {
+    readonly service: string
+    readonly version: string
+    readonly previousVersion: string
+    readonly atPercent: number
+    readonly breaches: ReadonlyArray<{ readonly metric: string; readonly observed: number; readonly limit: number }>
+  }): Promise<void>
 }

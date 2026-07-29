@@ -29,3 +29,17 @@ reload_command = "nginx -s reload"
 
 [notifications]
 # slack_webhook = "https://hooks.slack.com/services/..."
+
+[ai]
+# Optional LLM rollback postmortem (D30). Unset, it no-ops with no network call.
+# anthropic_api_key = "sk-ant-..."   # or env AI_ANTHROPIC_API_KEY
+model = "claude-opus-4-8"
+base_url = "https://api.anthropic.com"
+
+[changelog]
+# What grounds the postmortem: the commits shipped between the two versions,
+# via GitHub compare. repo_template maps a service to owner/repo ({service} is
+# substituted); empty disables it and the postmortem stays metrics-only.
+# repo_template = "acme/{service}"
+# github_token = "ghp_..."           # or env CHANGELOG_GITHUB_TOKEN
+base_url = "https://api.github.com"

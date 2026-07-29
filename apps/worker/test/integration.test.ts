@@ -1,6 +1,14 @@
 import { Layer, ManagedRuntime, Redacted } from "effect"
 import { NodeChildProcessSpawner, NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node"
-import { CaddyRouter, HttpHealth, NginxRouter, PrometheusMetrics, SlackNotify } from "@flux/adapters"
+import {
+  AnthropicLanguageModel,
+  CaddyRouter,
+  GitHubChangelog,
+  HttpHealth,
+  NginxRouter,
+  PrometheusMetrics,
+  SlackNotify
+} from "@flux/adapters"
 import { type AppServices, createActivities, type DeploymentInput, type DeploymentResult, SEARCH_ATTRIBUTES } from "@flux/orchestration"
 import { makePayloadCodec } from "@flux/orchestration"
 import { Client } from "@temporalio/client"
@@ -50,7 +58,9 @@ const appLayer = (baseUrl: string, configPath: string): Layer.Layer<AppServices>
       configPath,
       reloadCommand: ["true"],
       address: backendAddress
-    })
+    }),
+    AnthropicLanguageModel.layerDisabled,
+    GitHubChangelog.layerNone
   ).pipe(Layer.provide(PlatformLayer))
 
 // The same stack with the Caddy adapter driving the admin-API double (D20).
@@ -64,7 +74,9 @@ const caddyAppLayer = (baseUrl: string): Layer.Layer<AppServices> =>
       server: "flux",
       address: backendAddress,
       versionOf: versionOfDial
-    })
+    }),
+    AnthropicLanguageModel.layerDisabled,
+    GitHubChangelog.layerNone
   ).pipe(Layer.provide(PlatformLayer))
 
 const input: DeploymentInput = {

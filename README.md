@@ -99,6 +99,19 @@ Choices that go past plumbing:
   the old path, and the same edit without the patch guard fails the replay
   test with a determinism error. The lock also refuses `deprecatePatch` while
   those histories exist, which is the patch lifecycle doing its job.
+- A rollback drafts its own postmortem. When a canary rolls back, an activity
+  asks a language model which metric regressed and why, through Effect's own
+  provider-agnostic `LanguageModel` port. The use case never names a provider;
+  the Anthropic one is a small adapter in the same shape as the Slack one. To
+  keep it from just paraphrasing metrics the operator already sees, it's fed the
+  commits shipped between the two versions (a changelog port over GitHub's
+  compare API), so the model correlates the actual change with the symptom
+  instead of guessing. It's best-effort throughout: no key means no network call
+  and the rollback is untouched, and a missing changelog degrades to a
+  metrics-only summary. Scheduling it on the rollback path changed the command
+  sequence, so it too went behind `workflow.patched()`, which the committed
+  rollback history caught the moment it wasn't. A local HTTP double proves the
+  commit and the breach facts both reach the prompt.
 
 ## Layout
 

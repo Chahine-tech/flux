@@ -1,3 +1,4 @@
+export * from "./changelog.ts"
 export * from "./health.ts"
 export * from "./metrics.ts"
 export * from "./notify.ts"

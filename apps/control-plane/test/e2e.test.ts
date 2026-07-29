@@ -33,7 +33,8 @@ const okActivities = (): DeploymentActivities => ({
   monitorStep: async () => ({ _tag: "Within" }),
   notify: async () => {},
   readRouterState: async () => [],
-  recordOutcome: async () => {}
+  recordOutcome: async () => {},
+  postmortem: async () => {}
 })
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))

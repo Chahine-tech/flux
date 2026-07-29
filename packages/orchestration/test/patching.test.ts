@@ -63,7 +63,8 @@ describe("workflow patching (D26)", () => {
         notifications.push({ kind: n.kind, service: n.service })
       },
       readRouterState: async () => [],
-      recordOutcome: async () => {}
+      recordOutcome: async () => {},
+      postmortem: async () => {}
     }
     const worker = await Worker.create({
       connection: env.nativeConnection,

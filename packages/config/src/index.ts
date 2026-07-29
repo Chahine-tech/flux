@@ -1,4 +1,4 @@
-import { Config, ConfigProvider, Effect, FileSystem, Layer } from "effect"
+import { Config, ConfigProvider, Effect, FileSystem, Layer, Redacted } from "effect"
 import { parse as parseToml } from "toml"
 
 /**
@@ -43,8 +43,26 @@ const notifications = Config.all({
   slackWebhook: Config.redacted("slack_webhook").pipe(Config.option)
 }).pipe(Config.nested("notifications"))
 
+// The optional LLM postmortem (D30). The key is redacted and defaults to empty:
+// unset, the postmortem no-ops rather than failing. `baseUrl` is overridable so
+// a test can point the Anthropic adapter at a local double.
+const ai = Config.all({
+  anthropicApiKey: Config.redacted("anthropic_api_key").pipe(Config.withDefault(Redacted.make(""))),
+  model: Config.string("model").pipe(Config.withDefault("claude-opus-4-8")),
+  baseUrl: Config.string("base_url").pipe(Config.withDefault("https://api.anthropic.com"))
+}).pipe(Config.nested("ai"))
+
+// What grounds the postmortem (D30): commits between versions via GitHub compare.
+// `repoTemplate` maps a service to `owner/repo` (`{service}` is substituted);
+// empty disables the source and the postmortem falls back to metrics only.
+const changelog = Config.all({
+  repoTemplate: Config.string("repo_template").pipe(Config.withDefault("")),
+  githubToken: Config.redacted("github_token").pipe(Config.withDefault(Redacted.make(""))),
+  baseUrl: Config.string("base_url").pipe(Config.withDefault("https://api.github.com"))
+}).pipe(Config.nested("changelog"))
+
 /** The full, typed application configuration. */
-export const fluxConfig = Config.all({ temporal, metrics, router, thresholds, notifications })
+export const fluxConfig = Config.all({ temporal, metrics, router, thresholds, notifications, ai, changelog })
 
 export type FluxConfig = typeof fluxConfig extends Config.Config<infer A> ? A : never
 

@@ -3,6 +3,7 @@ import { Client, Connection } from "@temporalio/client"
 import { NativeConnection, Worker } from "@temporalio/worker"
 import { fileURLToPath } from "node:url"
 import { HealthPort, MetricsPort, NotifyPort, RouterPort } from "@flux/application"
+import { AnthropicLanguageModel, GitHubChangelog } from "@flux/adapters"
 import {
   activityInterceptors,
   createActivities,
@@ -59,7 +60,17 @@ const makeDemoLayer = Effect.gen(function*() {
     send: (n) => Console.log(`  [notify]  (${n.kind}) ${n.service}: ${n.message}`)
   })
 
-  return Layer.mergeAll(DemoMetrics, DemoHealth, DemoRouter, DemoNotify)
+  // The demo doesn't call a real LLM: a disabled LanguageModel makes the
+  // rollback postmortem no-op (it logs "postmortem skipped") without a key, and
+  // an empty changelog source keeps that path self-contained.
+  return Layer.mergeAll(
+    DemoMetrics,
+    DemoHealth,
+    DemoRouter,
+    DemoNotify,
+    AnthropicLanguageModel.layerDisabled,
+    GitHubChangelog.layerNone
+  )
 })
 
 const demoInput: DeploymentInput = {

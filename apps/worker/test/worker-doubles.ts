@@ -26,5 +26,8 @@ export const activities = (log: string): DeploymentActivities => ({
   },
   notify: async () => {},
   readRouterState: async () => [],
-  recordOutcome: async () => {}
+  recordOutcome: async () => {},
+  // The worker-kill proof drives a succeeding canary, so the postmortem never
+  // fires; a no-op keeps the doubles satisfying the full activity contract.
+  postmortem: async () => {}
 })

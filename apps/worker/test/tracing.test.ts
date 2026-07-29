@@ -1,5 +1,6 @@
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { HealthPort, MetricsPort, NotifyPort, RouterPort } from "@flux/application"
+import { AnthropicLanguageModel, GitHubChangelog } from "@flux/adapters"
 import {
   activityInterceptors,
   type AppServices,
@@ -43,7 +44,9 @@ const okPorts = Layer.mergeAll(
   Layer.succeed(HealthPort, { check: () => Effect.void }),
   Layer.succeed(RouterPort, { setTrafficWeight: () => Effect.void, readState: () => Effect.succeed([]) }),
   Layer.succeed(MetricsPort, { query: () => Effect.succeed(0) }),
-  Layer.succeed(NotifyPort, { send: () => Effect.void })
+  Layer.succeed(NotifyPort, { send: () => Effect.void }),
+  AnthropicLanguageModel.layerDisabled,
+  GitHubChangelog.layerNone
 ) satisfies Layer.Layer<AppServices>
 
 const input: DeploymentInput = {
