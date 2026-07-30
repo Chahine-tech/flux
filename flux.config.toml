@@ -13,7 +13,7 @@ namespace = "default"
 task_queue = "flux-deployments"
 
 [metrics]
-type = "prometheus"          # prometheus | http-json (D33)
+type = "prometheus"          # prometheus | http-json
 prometheus_url = "http://localhost:9090"
 # http-json backend: rule queries are "<url> <json-path>" (e.g. "http://svc/metrics data.error_rate").
 # http_json_token = "..."     # optional bearer, or env METRICS_HTTP_JSON_TOKEN
@@ -34,7 +34,7 @@ reload_command = "nginx -s reload"
 # slack_webhook = "https://hooks.slack.com/services/..."
 
 [ai]
-# Optional LLM rollback postmortem (D30). Unset, it no-ops with no network call.
+# Optional LLM rollback postmortem. Unset, it no-ops with no network call.
 # anthropic_api_key = "sk-ant-..."   # or env AI_ANTHROPIC_API_KEY
 model = "claude-opus-4-8"
 base_url = "https://api.anthropic.com"

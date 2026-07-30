@@ -22,7 +22,7 @@ jobs:
 
       - run: pnpm turbo run typecheck test
 
-  # Real-cluster proofs (D19): worker versioning, resource tuner, Schedules —
+  # Real-cluster proofs: worker versioning, resource tuner, Schedules —
   # the capabilities the time-skipping test server does not implement. Runs the
   # project's own compose so CI exercises exactly what developers run.
   real-temporal:

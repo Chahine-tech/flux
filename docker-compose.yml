@@ -1,6 +1,6 @@
-# flux dev infra — level N0 (ARCHITECTURE.md §7).
-# PostgreSQL also serves as the advanced visibility store (custom search attributes, N2).
-# Grafana + Tempo (OTel) arrive at level N1; demo service + nginx at N0-e2e.
+# flux local dev infra.
+# PostgreSQL also backs Temporal's advanced visibility (the custom search attributes).
+# Prometheus + Jaeger for metrics and traces; a whoami container as the demo target.
 name: flux
 
 services:
@@ -34,7 +34,7 @@ services:
       # address — not 127.0.0.1, which is what the server's own Nexus callback
       # config (below) and clusterMetadata.httpAddress default to. Binding on
       # all interfaces makes the server reachable from itself, other
-      # containers, and the host alike (N9/D25).
+      # containers, and the host alike.
       BIND_ON_IP: "0.0.0.0"
     ports:
       - "7233:7233"

@@ -15,7 +15,7 @@ scrape_configs:
   #   static_configs:
   #     - targets: ["host.docker.internal:9465"]
 
-  # N0-e2e — instrumented demo service behind nginx:
+  # Instrumented demo service behind nginx:
   # - job_name: demo-service
   #   static_configs:
   #     - targets: ["demo:8080"]

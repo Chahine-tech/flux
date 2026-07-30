@@ -1,12 +1,12 @@
 # Temporal dynamic config — local dev.
 # Workflow updates are enabled by default on recent servers;
-# flags kept explicit for documentation (used at N2).
+# flags kept explicit for documentation.
 frontend.enableUpdateWorkflowExecution:
   - value: true
 frontend.enableUpdateWorkflowExecutionAsyncAccepted:
   - value: true
 
-# Nexus (N9/D25) — required on server <1.30, which is not enabled by default.
+# Nexus — required on server <1.30, which is not enabled by default.
 # The frontend HTTP port (7243) and its address are already the config
 # template's own defaults (services.frontend.rpc.httpPort,
 # clusterMetadata.clusterInformation.active.httpAddress) — nothing to change

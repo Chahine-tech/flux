@@ -29,7 +29,7 @@ against Effect's engine as it is *today*.
 ## The boundary is the biggest difference
 
 Temporal imposes a hard wall: the workflow runs in a deterministic V8 isolate
-that must never see the Effect runtime (this repo's rule D6), and activities
+that must never see the Effect runtime, and activities
 bridge into Effect through a `ManagedRuntime` and a Promise boundary. Keeping
 that wall intact is a discipline the whole repo is organized around: separate
 entry points, `import type` only, a bundle-purity check, a replay test to catch
@@ -39,7 +39,7 @@ On the Effect engine, **the wall does not exist**. An `Activity.make` body is an
 ordinary `Effect`; the ports (`HealthPort`, `RouterPort`, …) are satisfied by
 whatever `Layer` wraps the workflow, in the same runtime, same process. No
 bridge, no serialization boundary inside the process, no second entry point.
-The whole D6/D7 apparatus — the most carefully engineered part of the Temporal
+The whole determinism-wall apparatus — the most carefully engineered part of the Temporal
 side — is simply not needed.
 
 That cuts both ways. The wall is also what makes Temporal's model *legible*:
@@ -134,7 +134,7 @@ engage at all. Two consequences, one in each direction:
 - **Against**: a compensation's own failure has nowhere typed to go. Its
   signature is `Effect<void, never, R>`, so a failed rollback becomes a defect.
   Temporal-side flux makes `RollbackFailed` a real, page-someone terminal
-  outcome (D31): after compensating it re-probes the previous version's health,
+  outcome: after compensating it re-probes the previous version's health,
   and a compensation that threw or a version that stays down ends the workflow
   in `RollbackFailed`, not silently in `RolledBack`. The same failure mode is
   structurally worse off on the Effect side.
@@ -181,7 +181,7 @@ executions, payload codecs, schedules, Nexus-style cross-boundary calls, an
 ecosystem of operational practice. Also: documentation.
 
 Effect, missing from Temporal: activities as plain effects in the same runtime
-(no bridge, no D6/D7 discipline), the typed error channel with
+(no bridge, no boundary discipline), the typed error channel with
 compiler-audited failure surfaces, compensation integrated with the error
 model, schema-first payloads end to end without a converter layer, and a
 dependency graph that is just `Layer`s all the way down.
