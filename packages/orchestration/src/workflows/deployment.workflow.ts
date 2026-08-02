@@ -47,6 +47,16 @@ const acts = proxyActivities<Pick<DeploymentActivities, "setTrafficWeight" | "no
   retry: { maximumAttempts: 3 }
 })
 
+// The rollback compensation runs at the top task-queue priority (1 of 5, where
+// lower is higher). When several deployments share a worker and one has to roll
+// back, restoring the previous version jumps ahead of the others' forward
+// traffic shifts, so users come off a bad version before new rollouts get slots.
+const rollbackActs = proxyActivities<Pick<DeploymentActivities, "setTrafficWeight">>({
+  startToCloseTimeout: "5 minutes",
+  retry: { maximumAttempts: 3 },
+  priority: { priorityKey: 1 }
+})
+
 // Monitoring is long-running and heartbeats, so it can be cancelled promptly and
 // resumed if a worker dies mid-window.
 const monitorActs = proxyActivities<Pick<DeploymentActivities, "monitorStep">>({
@@ -216,7 +226,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       // Traffic was already diverted before the continue-as-new — re-arm the
       // rollback compensation so a breach in this run still restores traffic.
       compensations.push(() =>
-        acts.setTrafficWeight({ service: input.service, version: input.previousVersion, weight: 100 }))
+        rollbackActs.setTrafficWeight({ service: input.service, version: input.previousVersion, weight: 100 }))
     }
 
     // 2. Progressive canary steps.
@@ -241,7 +251,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       // Register the compensation the first time traffic diverts to the new version.
       if (compensations.length === 0) {
         compensations.push(() =>
-          acts.setTrafficWeight({
+          rollbackActs.setTrafficWeight({
             service: input.service,
             version: input.previousVersion,
             weight: 100
@@ -417,7 +427,7 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       previousVersion: input.previousVersion
     })
     compensations.push(() =>
-      acts.setTrafficWeight({ service: input.service, version: input.previousVersion, weight: 100 }))
+      rollbackActs.setTrafficWeight({ service: input.service, version: input.previousVersion, weight: 100 }))
 
     // 4. Bake: one monitor over the bake window, cancellable by an abort.
     state = { ...state, phase: "monitoring" }

@@ -126,6 +126,37 @@ describe("deploymentWorkflow", () => {
     }
   })
 
+  it("schedules the rollback compensation at higher task-queue priority than forward shifts", async () => {
+    let step = 0
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowBundle,
+      activities: {
+        ...okActivities(),
+        monitorStep: async () =>
+          (++step >= 2
+            ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] }
+            : { _tag: "Within" })
+      }
+    })
+    const workflowId = `priority-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    await worker.runUntil(
+      env.client.workflow.execute("deploymentWorkflow", { taskQueue: TASK_QUEUE, workflowId, args: [baseInput] })
+    )
+
+    const history = await env.client.workflow.getHandle(workflowId).fetchHistory()
+    const shifts = (history.events ?? []).filter(
+      (e) => e.activityTaskScheduledEventAttributes?.activityType?.name === "setTrafficWeight"
+    )
+    const priorities = shifts.map((e) => e.activityTaskScheduledEventAttributes?.priority?.priorityKey)
+    // The compensation (restore previous version) is scheduled at priority 1;
+    // the forward shifts run at the default, so under load the rollback wins.
+    expect(priorities).toContain(1)
+    expect(priorities.some((key) => key !== 1)).toBe(true)
+  })
+
   it("escalates to RollbackFailed when the previous version is unhealthy after rollback", async () => {
     let step = 0
     const notifications: Array<string> = []
