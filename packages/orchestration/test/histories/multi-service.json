@@ -1,0 +1,502 @@
+{
+  "events": [
+    {
+      "eventId": "1",
+      "eventTime": "2026-09-11T15:08:42.022Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED",
+      "workflowExecutionStartedEventAttributes": {
+        "workflowType": {
+          "name": "multiServiceDeployment"
+        },
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "YmluYXJ5L2d6aXA=",
+                "flux-original-encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "H4sIAAAAAAAAE+3aTWvcMBAG4P/ynhJQF7n0UAQ9lJZAD6XQQy+OD1p7QgSypIxkJ8G4v734Y9tte2oOC4V5bkKj0RxfLE/IxKNrKcPU02kBg+4IhZE4uxhgML4+VAcNhcQ0ujjkb+db+vAWCrlQ2tok4pZCgam0VuhjcCXy5wyjFZgeBseU36fEcbQe5s76THOjwIPf5wi2X4Yg5shfbSEoPAzEzzDIQ3/FttDVupmnFLt332/xJIQQQoj/3i3muuqb62so9PYJRh90tYSEFL3/FArxaP0SKSqtZ3WeXGxyEl2EEEIIcVkvjy6tbe9JwosQQgghLuvl4eWR5MlICCGEEBf2T9GlWWs+xNAOzBTaZ5g3CnfW+Ruby54wFGK4sc4PvD4sHSOXVx0lCh2Fkpdo422AmRC5I4apt99mtheo08ecJRc1Ctu5/GWt744wdbNVbqea04Gfy+WcqX9r1swKhW3IrriRPv6axEx7+Xmb/eL9jtMYfzXdJ5wVHu24hql9gj/uVnuPZp5/AF3yzXU2JAAA"
+            }
+          ]
+        },
+        "workflowExecutionTimeout": "315360000s",
+        "workflowRunTimeout": "315360000s",
+        "workflowTaskTimeout": "10s",
+        "originalExecutionRunId": "8e41ecda-41ee-4ec7-8bac-b86df75de82d",
+        "identity": "flux-capture-client",
+        "firstExecutionRunId": "8e41ecda-41ee-4ec7-8bac-b86df75de82d",
+        "attempt": 1,
+        "firstWorkflowTaskBackoff": "0s",
+        "header": {}
+      }
+    },
+    {
+      "eventId": "2",
+      "eventTime": "2026-09-11T15:08:42.022Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "3",
+      "eventTime": "2026-09-11T15:08:42.022Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "2",
+        "identity": "flux-capture-worker",
+        "historySizeBytes": "711"
+      }
+    },
+    {
+      "eventId": "4",
+      "eventTime": "2026-09-11T15:08:42.057Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "2",
+        "identity": "flux-capture-worker",
+        "binaryChecksum": "@temporalio/worker@1.23.0+298843873e6bdb558188330f409ca5316a404f2f460a9e3a412745484dfb8019",
+        "sdkMetadata": {
+          "coreUsedFlags": [
+            3,
+            1,
+            2
+          ],
+          "sdkName": "temporal-typescript",
+          "sdkVersion": "1.23.0"
+        },
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "5",
+      "eventTime": "2026-09-11T15:08:42.057Z",
+      "eventType": "EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED",
+      "startChildWorkflowExecutionInitiatedEventAttributes": {
+        "namespace": "default",
+        "workflowId": "multi-service-db",
+        "workflowType": {
+          "name": "deploymentWorkflow"
+        },
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "YmluYXJ5L2d6aXA=",
+                "flux-original-encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "H4sIAAAAAAAAE+3WvWoDMRAE4HeZygZxSKmCwEXKFGlSuLFdKPYaBPrzriQcjsuzh0sav4JBXzswTDkzhLj7M8Hi8gWFTiw+J1j0l8lMGgqFqfvcZP8Y6ekVClKpCOxhRiE+U6qwRmuFmJOvmT8EVisw3ZpnkrdSOHcXYK8uCC0nBW6B/guSi+sIYs786SpB4daIv2EhLW7YVdr8hTKXfNn9HHEfhmEYhuHpHbEcTDxtt1CI7g6rJ23Wk1ByCO+pEncX1kthtF5+AQBkEmW5CAAA"
+            }
+          ]
+        },
+        "workflowExecutionTimeout": "0s",
+        "workflowRunTimeout": "0s",
+        "workflowTaskTimeout": "10s",
+        "workflowTaskCompletedEventId": "3",
+        "header": {},
+        "memo": {}
+      }
+    },
+    {
+      "eventId": "6",
+      "eventTime": "2026-09-11T15:08:42.058Z",
+      "eventType": "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED",
+      "childWorkflowExecutionStartedEventAttributes": {
+        "namespace": "default",
+        "initiatedEventId": "5",
+        "workflowExecution": {
+          "workflowId": "multi-service-db",
+          "runId": "b46b022a-e820-4e6e-b93a-5a6a7ca7dff5"
+        },
+        "workflowType": {
+          "name": "deploymentWorkflow"
+        }
+      }
+    },
+    {
+      "eventId": "7",
+      "eventTime": "2026-09-11T15:08:42.058Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "8",
+      "eventTime": "2026-09-11T15:08:42.058Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "7",
+        "identity": "flux-capture-worker",
+        "historySizeBytes": "1468"
+      }
+    },
+    {
+      "eventId": "9",
+      "eventTime": "2026-09-11T15:08:42.064Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "7",
+        "identity": "flux-capture-worker",
+        "binaryChecksum": "@temporalio/worker@1.23.0+298843873e6bdb558188330f409ca5316a404f2f460a9e3a412745484dfb8019",
+        "sdkMetadata": {},
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "10",
+      "eventTime": "2026-09-11T15:08:42.084Z",
+      "eventType": "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED",
+      "childWorkflowExecutionCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJraW5kIjoiU3VjY2VlZGVkIiwic2VydmljZSI6ImRiIiwidmVyc2lvbiI6InYyLjEuMCJ9"
+            }
+          ]
+        },
+        "namespace": "default",
+        "workflowExecution": {
+          "workflowId": "multi-service-db",
+          "runId": "b46b022a-e820-4e6e-b93a-5a6a7ca7dff5"
+        },
+        "workflowType": {
+          "name": "deploymentWorkflow"
+        },
+        "initiatedEventId": "5",
+        "startedEventId": "6"
+      }
+    },
+    {
+      "eventId": "11",
+      "eventTime": "2026-09-11T15:08:42.084Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "12",
+      "eventTime": "2026-09-11T15:08:42.084Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "11",
+        "identity": "flux-capture-worker",
+        "historySizeBytes": "1892"
+      }
+    },
+    {
+      "eventId": "13",
+      "eventTime": "2026-09-11T15:08:42.088Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "11",
+        "identity": "flux-capture-worker",
+        "binaryChecksum": "@temporalio/worker@1.23.0+298843873e6bdb558188330f409ca5316a404f2f460a9e3a412745484dfb8019",
+        "sdkMetadata": {},
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "14",
+      "eventTime": "2026-09-11T15:08:42.088Z",
+      "eventType": "EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED",
+      "startChildWorkflowExecutionInitiatedEventAttributes": {
+        "namespace": "default",
+        "workflowId": "multi-service-api",
+        "workflowType": {
+          "name": "deploymentWorkflow"
+        },
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "flux-original-encoding": "anNvbi9wbGFpbg==",
+                "encoding": "YmluYXJ5L2d6aXA="
+              },
+              "data": "H4sIAAAAAAAAE+3WvWoDMRAE4HeZygZxSK6MwEXKFGlSuLFdCGcNAv15VxI2x/nZwyVNXiGgrx0YppwZQtz9lWDhiodCJxafEyz6bjKThkJh6j43Of6N9LSHglQqAnuaUYivlCqs0Voh5uRr5g+B1QpM9+aZ5K0Uzt0F2JsLQstFgVug34Lk4rqCmDN/ukpQuDfiJyykxQ27SpufUOaSvw6vMx7DMAzDMPx7ZywnEy/bLRSie8DqSZv1JJQcwnuqxN2F9VIYrZdvNCq2iLoIAAA="
+            }
+          ]
+        },
+        "workflowExecutionTimeout": "0s",
+        "workflowRunTimeout": "0s",
+        "workflowTaskTimeout": "10s",
+        "workflowTaskCompletedEventId": "12",
+        "header": {},
+        "memo": {}
+      }
+    },
+    {
+      "eventId": "15",
+      "eventTime": "2026-09-11T15:08:42.088Z",
+      "eventType": "EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED",
+      "startChildWorkflowExecutionInitiatedEventAttributes": {
+        "namespace": "default",
+        "workflowId": "multi-service-cache",
+        "workflowType": {
+          "name": "deploymentWorkflow"
+        },
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "flux-original-encoding": "anNvbi9wbGFpbg==",
+                "encoding": "YmluYXJ5L2d6aXA="
+              },
+              "data": "H4sIAAAAAAAAE+3WvWoDMRAE4HeZygZxSKmMIEXKFGlSpLFdiMuGCPTnXUnYHOdnN5c0eYWAvnZgmHIWCHH3M8FidvM3QaETi88JFv1pMpOGQmHqPjf5+Bvp6QAFqVQE9rigEM+UKqzRWiHm5GvmN4HVCkyX5pnkpRTO3QXYLxeE1rMCt0C/BcnFbQcxZ353ddtyacQ3WEiLO3aVdj+hLCV/Pt9PuA7DMAzD8O+dsB5NPO/3UIjuCqsnbbaTUHIIr6kSdxe2S2G0Xh+rFxZJvAgAAA=="
+            }
+          ]
+        },
+        "workflowExecutionTimeout": "0s",
+        "workflowRunTimeout": "0s",
+        "workflowTaskTimeout": "10s",
+        "workflowTaskCompletedEventId": "12",
+        "header": {},
+        "memo": {}
+      }
+    },
+    {
+      "eventId": "16",
+      "eventTime": "2026-09-11T15:08:42.088Z",
+      "eventType": "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED",
+      "childWorkflowExecutionStartedEventAttributes": {
+        "namespace": "default",
+        "initiatedEventId": "14",
+        "workflowExecution": {
+          "workflowId": "multi-service-api",
+          "runId": "0f02a1bc-e1d6-42a4-bb64-eb621c9c9969"
+        },
+        "workflowType": {
+          "name": "deploymentWorkflow"
+        }
+      }
+    },
+    {
+      "eventId": "17",
+      "eventTime": "2026-09-11T15:08:42.088Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "18",
+      "eventTime": "2026-09-11T15:08:42.088Z",
+      "eventType": "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED",
+      "childWorkflowExecutionStartedEventAttributes": {
+        "namespace": "default",
+        "initiatedEventId": "15",
+        "workflowExecution": {
+          "workflowId": "multi-service-cache",
+          "runId": "a59f8b71-69a8-46d7-9cd9-f702dcfaaa00"
+        },
+        "workflowType": {
+          "name": "deploymentWorkflow"
+        }
+      }
+    },
+    {
+      "eventId": "19",
+      "eventTime": "2026-09-11T15:08:42.088Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "17",
+        "identity": "flux-capture-worker",
+        "historySizeBytes": "3118"
+      }
+    },
+    {
+      "eventId": "20",
+      "eventTime": "2026-09-11T15:08:42.092Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "17",
+        "identity": "flux-capture-worker",
+        "binaryChecksum": "@temporalio/worker@1.23.0+298843873e6bdb558188330f409ca5316a404f2f460a9e3a412745484dfb8019",
+        "sdkMetadata": {},
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "21",
+      "eventTime": "2026-09-11T15:08:42.104Z",
+      "eventType": "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED",
+      "childWorkflowExecutionCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJraW5kIjoiRmFpbGVkIiwic2VydmljZSI6ImFwaSIsInJlYXNvbiI6IkhlYWx0aENoZWNrRmFpbGVkOiBwcm9iZSA1MDMifQ=="
+            }
+          ]
+        },
+        "namespace": "default",
+        "workflowExecution": {
+          "workflowId": "multi-service-api",
+          "runId": "0f02a1bc-e1d6-42a4-bb64-eb621c9c9969"
+        },
+        "workflowType": {
+          "name": "deploymentWorkflow"
+        },
+        "initiatedEventId": "14",
+        "startedEventId": "16"
+      }
+    },
+    {
+      "eventId": "22",
+      "eventTime": "2026-09-11T15:08:42.104Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "23",
+      "eventTime": "2026-09-11T15:08:42.104Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "22",
+        "identity": "flux-capture-worker",
+        "historySizeBytes": "3562"
+      }
+    },
+    {
+      "eventId": "24",
+      "eventTime": "2026-09-11T15:08:42.105Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "22",
+        "identity": "flux-capture-worker",
+        "binaryChecksum": "@temporalio/worker@1.23.0+298843873e6bdb558188330f409ca5316a404f2f460a9e3a412745484dfb8019",
+        "sdkMetadata": {},
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "25",
+      "eventTime": "2026-09-11T15:08:42.113Z",
+      "eventType": "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED",
+      "childWorkflowExecutionCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJraW5kIjoiU3VjY2VlZGVkIiwic2VydmljZSI6ImNhY2hlIiwidmVyc2lvbiI6InYyLjEuMCJ9"
+            }
+          ]
+        },
+        "namespace": "default",
+        "workflowExecution": {
+          "workflowId": "multi-service-cache",
+          "runId": "a59f8b71-69a8-46d7-9cd9-f702dcfaaa00"
+        },
+        "workflowType": {
+          "name": "deploymentWorkflow"
+        },
+        "initiatedEventId": "15",
+        "startedEventId": "18"
+      }
+    },
+    {
+      "eventId": "26",
+      "eventTime": "2026-09-11T15:08:42.113Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "flux-capture",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "27",
+      "eventTime": "2026-09-11T15:08:42.113Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "26",
+        "identity": "flux-capture-worker",
+        "historySizeBytes": "3992"
+      }
+    },
+    {
+      "eventId": "28",
+      "eventTime": "2026-09-11T15:08:42.114Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "26",
+        "identity": "flux-capture-worker",
+        "binaryChecksum": "@temporalio/worker@1.23.0+298843873e6bdb558188330f409ca5316a404f2f460a9e3a412745484dfb8019",
+        "sdkMetadata": {},
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "29",
+      "eventTime": "2026-09-11T15:08:42.114Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED",
+      "workflowExecutionCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg=="
+              },
+              "data": "eyJraW5kIjoiU29tZUZhaWxlZCIsInBlclNlcnZpY2UiOlt7InNlcnZpY2UiOiJkYiIsInJlc3VsdCI6eyJraW5kIjoiU3VjY2VlZGVkIiwic2VydmljZSI6ImRiIiwidmVyc2lvbiI6InYyLjEuMCJ9fSx7InNlcnZpY2UiOiJhcGkiLCJyZXN1bHQiOnsia2luZCI6IkZhaWxlZCIsInNlcnZpY2UiOiJhcGkiLCJyZWFzb24iOiJIZWFsdGhDaGVja0ZhaWxlZDogcHJvYmUgNTAzIn19LHsic2VydmljZSI6ImNhY2hlIiwicmVzdWx0Ijp7ImtpbmQiOiJTdWNjZWVkZWQiLCJzZXJ2aWNlIjoiY2FjaGUiLCJ2ZXJzaW9uIjoidjIuMS4wIn19LHsic2VydmljZSI6IndlYiIsInJlc3VsdCI6eyJraW5kIjoiU2tpcHBlZCIsInNlcnZpY2UiOiJ3ZWIiLCJibG9ja2VkQnkiOiJhcGkifX1dfQ=="
+            }
+          ]
+        },
+        "workflowTaskCompletedEventId": "27"
+      }
+    }
+  ]
+}

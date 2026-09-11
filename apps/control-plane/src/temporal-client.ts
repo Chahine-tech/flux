@@ -20,7 +20,8 @@ import { deleteDriftSchedule, ensureDriftSchedule as ensureDriftScheduleImpl } f
 export class TemporalClient extends Context.Service<TemporalClient, {
   readonly start: (request: TriggerDeploymentRequest) => Effect.Effect<string>
   /** Start a multi-service rollout (a parent workflow over one child per service). */
-  readonly startMulti: (request: TriggerMultiRequest) => Effect.Effect<string>
+  /** Takes the already-compiled input: the dependency plan is resolved by the handler, not here. */
+  readonly startMulti: (input: MultiServiceInput) => Effect.Effect<string>
   readonly status: (workflowId: string) => Effect.Effect<DeploymentState, DeploymentNotFound>
   readonly list: (
     service: string | undefined,
@@ -82,13 +83,13 @@ export const make = (client: Client): typeof TemporalClient.Service => {
         return workflowId
       }),
 
-    startMulti: (request) =>
+    startMulti: (input) =>
       withClientTraceContext(async () => {
         const workflowId = `multi-${Date.now()}`
         await client.workflow.start("multiServiceDeployment", {
           taskQueue: TASK_QUEUE,
           workflowId,
-          args: [request as MultiServiceInput]
+          args: [input]
         })
         return workflowId
       }),

@@ -1,10 +1,28 @@
 import { DateTime, Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { FluxApi, OutsideDeploymentWindow } from "@flux/contracts"
-import { evaluateWindow } from "@flux/domain"
+import { FluxApi, InvalidRolloutPlan, OutsideDeploymentWindow } from "@flux/contracts"
+import { compileRolloutPlan, evaluateWindow, type PlanCompilation } from "@flux/domain"
+import type { MultiServiceInput } from "@flux/orchestration"
 import { AdmissionController } from "../admission.ts"
 import { ReadModel } from "../read-model.ts"
 import { TemporalClient } from "../temporal-client.ts"
+
+/** Turn a compile failure into something an operator can act on. */
+const describePlanFailure = (
+  failure: Exclude<PlanCompilation, { _tag: "Compiled" }>
+): { reason: "Cycle" | "UnknownDependency" | "SelfDependency"; detail: string } => {
+  switch (failure._tag) {
+    case "Cycle":
+      return { reason: "Cycle", detail: `dependency cycle: ${failure.path.join(" -> ")}` }
+    case "UnknownDependency":
+      return {
+        reason: "UnknownDependency",
+        detail: `"${failure.service}" depends on "${failure.dependsOn}", which is not in this rollout`
+      }
+    case "SelfDependency":
+      return { reason: "SelfDependency", detail: `"${failure.service}" depends on itself` }
+  }
+}
 
 /** How many deployments `GET /deployments` returns when no `limit` is given. */
 const DEFAULT_LIMIT = 20
@@ -47,7 +65,23 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
     .handle("triggerMulti", ({ payload }) =>
       Effect.gen(function*() {
         const temporal = yield* TemporalClient
-        const workflowId = yield* temporal.startMulti(payload)
+        // Compile the declared dependencies into a topological plan here, on
+        // the Effect side. The workflow receives the plan, never the graph:
+        // that keeps the parent Effect-free (D6) and freezes the ordering in
+        // the start event, so a later edit to the declaration cannot reorder a
+        // replay. `dependsOn` is control-plane-only input and is dropped.
+        const { dependsOn, ...rest } = payload
+        const compiled = compileRolloutPlan(
+          payload.services.map((service) => service.service),
+          dependsOn
+        )
+        if (compiled._tag !== "Compiled") {
+          return yield* new InvalidRolloutPlan(describePlanFailure(compiled))
+        }
+        const workflowId = yield* temporal.startMulti({
+          ...(rest as unknown as MultiServiceInput),
+          plan: compiled.plan
+        })
         return { workflowId }
       }))
     .handle("enableDrift", ({ payload }) =>

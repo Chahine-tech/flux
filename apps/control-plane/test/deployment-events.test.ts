@@ -65,6 +65,50 @@ describe("deployment events poller", () => {
     }).pipe(Effect.provide(EventsLive))
   })
 
+  it.effect("does not repeat the state the snapshot already showed", () => {
+    // The real sequence behind a duplicated line in `flux status --watch`:
+    // `flux deploy` starts a workflow, the watcher connects a moment later and
+    // is shown the current state, and only *then* does the poller see the
+    // workflow for the first time. A first sighting is a delta to the poller
+    // (`lastSeen` has no prior), so it publishes a state this subscriber has
+    // already been given. Subscribing before reading the snapshot is what makes
+    // it reachable, and losing an event would be the worse trade — so the
+    // repeat is collapsed in `watch` instead.
+    let current = state(10)
+    let running: Array<string> = []
+    const FakeTemporal = Layer.succeed(TemporalClient, {
+      start: () => Effect.succeed("wf1"),
+      startMulti: () => Effect.succeed("multi"),
+      status: () => Effect.sync(() => current),
+      list: () => Effect.succeed([]),
+      listRunningIds: () => Effect.sync(() => running),
+      listClosed: () => Effect.succeed([]),
+      approve: () => Effect.void,
+      abort: () => Effect.void,
+      ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
+      disableDrift: () => Effect.void
+    })
+    const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
+
+    return Effect.gen(function*() {
+      const events = yield* DeploymentEvents
+      const collector = yield* events.watch("wf1").pipe(Stream.take(2), Stream.runCollect, Effect.forkChild)
+
+      // The watcher subscribes and is shown the current state (10%), while the
+      // poller has not yet seen this workflow at all.
+      yield* TestClock.adjust("1 second")
+      // It shows up in the running set: the next tick is its first sighting.
+      running = ["wf1"]
+      yield* TestClock.adjust("5 seconds")
+      // A real change, which must still come through.
+      current = state(30)
+      yield* TestClock.adjust("5 seconds")
+
+      const collected = yield* Fiber.join(collector)
+      expect(collected.map((s) => s.currentPercent)).toEqual([10, 30])
+    }).pipe(Effect.provide(EventsLive))
+  })
+
   it.effect("calls onDeploymentEnded when a tracked deployment leaves the running set", () => {
     let running = ["wf1"]
     const ended: Array<string> = []

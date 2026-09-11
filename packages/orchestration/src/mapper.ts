@@ -1,6 +1,15 @@
 import { Duration } from "effect"
-import type { DeploymentConfig } from "@flux/domain"
-import type { DeploymentInput, DeploymentStrategy } from "./deployment-input.ts"
+import type { DeploymentConfig, RolloutPlan } from "@flux/domain"
+import type { DeploymentInput, DeploymentStrategy, RolloutPlanInput } from "./deployment-input.ts"
+
+/**
+ * `deployment-input.ts` imports nothing, so it restates the compiled plan's
+ * shape instead of importing `RolloutPlan` from the domain. This assignment is
+ * the guard against the two drifting apart: it is erased at runtime and fails
+ * the build the moment the domain's plan stops fitting what the workflow reads.
+ */
+const _planShapesAgree: (plan: RolloutPlan) => RolloutPlanInput = (plan) => plan
+void _planShapesAgree
 
 /**
  * Convert a domain `DeploymentConfig` (Effect `Duration` values) into the

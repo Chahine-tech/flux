@@ -121,10 +121,17 @@ export const layer = (
               onSome: (state) => Stream.concat(Stream.make(state), deltas)
             })
 
+            // Subscribing before reading the snapshot means a poll landing
+            // between the two is published *and* included in the snapshot, so
+            // the subscriber would see the same state twice. Losing an event is
+            // worse than repeating one, so the order stays and the repeat is
+            // collapsed here, against the same fields the poller compares.
+            const deduped = Stream.changesWith(stream, sameState)
+
             // Emit the terminal state (the one carrying an `outcome`) and then
             // complete, so `flux status --watch` exits instead of hanging on a
             // finished deployment.
-            return Stream.takeUntil(stream, (state) => state.outcome !== undefined)
+            return Stream.takeUntil(deduped, (state) => state.outcome !== undefined)
           })
         )
 

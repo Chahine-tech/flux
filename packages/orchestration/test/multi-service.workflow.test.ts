@@ -4,13 +4,15 @@ import { ApplicationFailure } from "@temporalio/common"
 import { TestWorkflowEnvironment } from "@temporalio/testing"
 import { bundleWorkflowCode, Worker } from "@temporalio/worker"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { compileRolloutPlan } from "@flux/domain"
 import type { DeploymentActivities } from "../src/activities/types.ts"
 import { type DeploymentInput, type MultiServiceInput, type MultiServiceResult, SEARCH_ATTRIBUTES } from "../src/deployment-input.ts"
 
 /**
  * Multi-service parent workflow against a time-skipping Temporal server:
  * it starts one real `deploymentWorkflow` child per service and coordinates them.
- * Activities are mocked so we test the parent's fan-out and fail-fast policy.
+ * Activities are mocked so we test the parent's scheduling and failure
+ * policies: fan-out, fail-fast, dependency ordering, and abort-dependents.
  */
 
 const KEYWORD = 2
@@ -122,5 +124,74 @@ describe("multiServiceDeployment", () => {
     // The siblings that were monitoring got aborted by the parent's fail-fast.
     expect(byService["web"]).toBe("Aborted")
     expect(byService["worker"]).toBe("Aborted")
+  })
+
+  it("deploys a chain in dependency order", async () => {
+    // The plan is compiled here, exactly as the control plane does before
+    // starting the workflow — the graph never crosses into the parent.
+    const compiled = compileRolloutPlan(["web", "api", "db"], { web: ["api"], api: ["db"] })
+    expect(compiled._tag).toBe("Compiled")
+    if (compiled._tag !== "Compiled") return
+
+    const shifted: Array<string> = []
+    const activities: DeploymentActivities = {
+      ...okActivities(),
+      setTrafficWeight: async (p) => {
+        shifted.push(p.service)
+      }
+    }
+
+    const result = await run({
+      // Declared in reverse on purpose: the order that matters is the plan's.
+      services: [service("web", 0), service("api", 0), service("db", 0)],
+      maxConcurrency: 3,
+      failFast: false,
+      onFailure: "abort-dependents",
+      plan: compiled.plan
+    }, activities)
+
+    expect(result.kind).toBe("AllSucceeded")
+    // Even with three slots free, nothing overtakes its dependency.
+    expect(shifted).toEqual(["db", "api", "web"])
+  })
+
+  it("abort-dependents: a failure stops what depends on it and spares the rest", async () => {
+    //   db ──> api ──┐
+    //     └──> cache ─┴──> web
+    // api fails, so web is blocked; cache shares only db and must finish.
+    const compiled = compileRolloutPlan(["db", "api", "cache", "web"], {
+      api: ["db"],
+      cache: ["db"],
+      web: ["api", "cache"]
+    })
+    expect(compiled._tag).toBe("Compiled")
+    if (compiled._tag !== "Compiled") return
+
+    const activities: DeploymentActivities = {
+      ...okActivities(),
+      healthCheck: async (p) => {
+        if (p.service === "api") {
+          throw ApplicationFailure.nonRetryable("probe 503", "HealthCheckFailed")
+        }
+      }
+    }
+
+    const result = await run({
+      services: [service("db", 0), service("api", 0), service("cache", 0), service("web", 0)],
+      maxConcurrency: 4,
+      failFast: false,
+      onFailure: "abort-dependents",
+      plan: compiled.plan
+    }, activities)
+
+    expect(result.kind).toBe("SomeFailed")
+    const byService = Object.fromEntries(result.perService.map((entry) => [entry.service, entry.result]))
+
+    expect(byService["db"]!.kind).toBe("Succeeded")
+    expect(byService["api"]!.kind).toBe("Failed")
+    // The independent branch is untouched — this is the whole point of the policy.
+    expect(byService["cache"]!.kind).toBe("Succeeded")
+    // web never started, so it is Skipped rather than Failed, and says why.
+    expect(byService["web"]).toEqual({ kind: "Skipped", service: "web", blockedBy: "api" })
   })
 }, 120_000)

@@ -66,6 +66,18 @@ export class OutsideDeploymentWindow extends Schema.TaggedError<OutsideDeploymen
   { httpApiStatus: 422 }
 ) {}
 
+/**
+ * The declared dependencies do not form a usable rollout: a cycle, a
+ * dependency on a service absent from the rollout, or a service depending on
+ * itself. `detail` is human-readable and names the services involved, because
+ * "invalid configuration" is useless when you have twenty of them.
+ */
+export class InvalidRolloutPlan extends Schema.TaggedError<InvalidRolloutPlan>()(
+  "InvalidRolloutPlan",
+  { reason: Schema.Literals(["Cycle", "UnknownDependency", "SelfDependency"]), detail: Schema.String },
+  { httpApiStatus: 422 }
+) {}
+
 const WorkflowIdParam = { workflowId: Schema.String }
 
 const deployments = HttpApiGroup.make("deployments")
@@ -79,7 +91,8 @@ const deployments = HttpApiGroup.make("deployments")
   .add(
     HttpApiEndpoint.post("triggerMulti", "/deployments/multi", {
       payload: TriggerMultiRequest,
-      success: TriggerDeploymentResponse
+      success: TriggerDeploymentResponse,
+      error: [InvalidRolloutPlan]
     })
   )
   .add(

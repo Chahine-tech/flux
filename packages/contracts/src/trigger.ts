@@ -74,6 +74,18 @@ export const TriggerMultiRequest = Schema.Struct({
   /** How many services roll out concurrently. */
   maxConcurrency: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(1)),
   /** If true, the first non-success aborts every in-flight sibling. */
-  failFast: Schema.Boolean
+  failFast: Schema.Boolean,
+  /**
+   * `{ dependent: [what it needs first] }`. The control plane compiles this
+   * into a topological plan before starting the workflow, so a cycle is a 422
+   * here rather than a deadlock later. Absent means every service is
+   * independent, which is how the rollout behaved before dependencies existed.
+   */
+  dependsOn: Schema.optionalKey(Schema.Record(Identifier, Schema.Array(Identifier))),
+  /**
+   * What a non-success does to the rest. Absent falls back to `failFast`, so
+   * existing callers keep their behaviour without sending this.
+   */
+  onFailure: Schema.optionalKey(Schema.Literals(["fail-fast", "abort-dependents", "continue"]))
 })
 export type TriggerMultiRequest = typeof TriggerMultiRequest.Type

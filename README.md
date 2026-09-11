@@ -13,6 +13,14 @@ doesn't lose it. It drives nginx or Caddy and reads Prometheus. No Kubernetes.
 
 ![A canary promoting itself 10% → 50% → 100%](docs/demo.gif)
 
+Same command, a version whose error rate is 8× its budget. The breach is caught
+in the first window, so only 10% of traffic ever saw it:
+
+![The same canary refusing a bad version and restoring the previous one](docs/demo-rollback.gif)
+
+Both are real recordings against a running stack, reading real Prometheus
+metrics — `api` is genuinely healthy, `checkout` genuinely is not.
+
 ## How a deployment runs
 
 You give it a service, the new version, and the one to fall back to. The workflow
@@ -75,8 +83,30 @@ Choices that go past plumbing:
   writes to.
 - `/stats` answers questions Temporal's visibility can't — rollback rate per
   service, mean canary duration — from a small SQLite read model.
-- A multi-service rollout is a parent workflow over one child per service, with a
-  fail-fast policy that aborts the siblings if one goes bad.
+- A multi-service rollout is a parent workflow over one child per service, and it
+  deploys them in dependency order. You declare what needs what; the control
+  plane compiles that into a topological plan with Effect's `Graph` and hands the
+  workflow flat lookup tables, so the graph never enters the deterministic side
+  and the order is frozen in history rather than recomputed at replay. `--plan`
+  resolves it without deploying anything:
+
+  ```
+  $ flux deploy-multi --config rollout.json --plan
+  [flux] rollout order for 4 services:
+    1. db
+    2. api, cache
+    3. web
+
+  $ flux deploy-multi --config broken.json --plan
+  [flux] dependency cycle: web -> db -> api -> web
+  ```
+
+  `api` and `cache` both wait on `db` and then go together; `web` waits for both.
+  A cycle is refused before anything starts and says which one it found, which is
+  the reason to reach for a graph library rather than hand-roll the sort. Failure
+  is a policy too: `abort-dependents` stops only what transitively depends on the
+  service that broke, lets independent branches finish, and reports the blocked
+  ones `Skipped` rather than failed — no child ever ran for them.
 - The rollout shape is a strategy the workflow is polymorphic over. Canary shifts
   traffic in steps; blue/green flips 100% at once after a health check and bakes,
   rolling back with a single shift because the old version was never scaled down.
@@ -182,11 +212,15 @@ plane's client, trigger through outcome. Multi-service fail-fast. The cancellabl
 monitor. `continueAsNew`. And, with the real adapters pointed at local HTTP
 doubles, a full canary to `Succeeded` that checks the side effects actually
 happened: the health endpoint got probed, the nginx config got written.
-Two captured histories — a promotion and a rollback — are committed and
-replayed against the current workflow code on every run, so an edit that would
-break in-flight deployments fails as a determinism error before it ships.
+Three captured histories — a promotion, a rollback, and a dependency-ordered
+rollout that loses a service in the middle — are committed and replayed against
+the current workflow code on every run, so an edit that would break in-flight
+deployments fails as a determinism error before it ships.
 
-**In isolation.** The STM admission controller (five concurrent triggers, a
+**In isolation.** Compiling the dependency graph: a cycle is named, a dependency
+on a service outside the rollout is rejected, and two property tests over random
+DAGs check that a dependency always lands in an earlier wave and that nothing is
+ever its own dependent. The STM admission controller (five concurrent triggers, a
 budget of two, exactly two admitted). Drift comparison and reconciliation. The
 SQLite projection and its aggregation query. The poller's delta suppression.
 

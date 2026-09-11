@@ -3,6 +3,7 @@ import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Authorization, DeploymentNotFound, FluxApi } from "@flux/contracts"
 import type { ServiceStats } from "@flux/contracts"
+import type { MultiServiceInput } from "@flux/orchestration"
 import { afterAll, describe, expect, it } from "vitest"
 import * as Admission from "../src/admission.ts"
 import * as Auth from "../src/http/auth.ts"
@@ -28,9 +29,15 @@ const runningState = {
   totalSteps: 3
 } as const
 
+/** Captures what the handler actually hands the workflow, so the compiled plan can be asserted. */
+const startedMulti: Array<MultiServiceInput> = []
+
 const MockTemporal = Layer.succeed(TemporalClient, {
   start: (request) => Effect.succeed(`dep-${request.service}-test`),
-  startMulti: () => Effect.succeed("multi"),
+  startMulti: (input) => {
+    startedMulti.push(input)
+    return Effect.succeed("multi")
+  },
   status: (workflowId) =>
     workflowId === "known"
       ? Effect.succeed(runningState)
@@ -119,6 +126,56 @@ describe("control plane HTTP API", () => {
     expect(second.status).toBe(409)
     expect(await second.json()).toMatchObject({ _tag: "ServiceAlreadyDeploying", service: "billing" })
   })
+
+  it("POST /deployments/multi compiles the dependency graph into a plan for the workflow", async () => {
+    startedMulti.length = 0
+    const res = await post("/deployments/multi", {
+      services: ["web", "api", "cache", "db"].map((service) => ({ ...validTrigger, service })),
+      maxConcurrency: 2,
+      failFast: false,
+      onFailure: "abort-dependents",
+      dependsOn: { api: ["db"], cache: ["db"], web: ["api", "cache"] }
+    })
+
+    expect(res.status).toBe(200)
+    expect(startedMulti).toHaveLength(1)
+    const input = startedMulti[0]!
+    // The raw declaration is control-plane-only and is stripped; what crosses
+    // is the compiled plan, with dependencies already normalized.
+    expect(input).not.toHaveProperty("dependsOn")
+    expect(input.plan!.dependsOn).toEqual({ db: [], api: ["db"], cache: ["db"], web: ["api", "cache"] })
+    expect(input.plan!.order).toEqual(["db", "api", "cache", "web"])
+    expect(input.plan!.waves).toEqual([["db"], ["api", "cache"], ["web"]])
+    expect(input.onFailure).toBe("abort-dependents")
+  })
+
+  it("POST /deployments/multi rejects a dependency cycle with 422 and names it", async () => {
+    const res = await post("/deployments/multi", {
+      services: ["web", "api", "db"].map((service) => ({ ...validTrigger, service })),
+      maxConcurrency: 2,
+      failFast: false,
+      dependsOn: { web: ["api"], api: ["db"], db: ["web"] }
+    })
+
+    expect(res.status).toBe(422)
+    const body = await res.json() as { _tag: string; reason: string; detail: string }
+    expect(body._tag).toBe("InvalidRolloutPlan")
+    expect(body.reason).toBe("Cycle")
+    expect(body.detail).toMatch(/dependency cycle: (web|api|db)( -> (web|api|db)){3}/)
+  })
+
+  it("POST /deployments/multi rejects a dependency on a service outside the rollout", async () => {
+    const res = await post("/deployments/multi", {
+      services: [{ ...validTrigger, service: "api" }],
+      maxConcurrency: 1,
+      failFast: false,
+      dependsOn: { api: ["db"] }
+    })
+
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ _tag: "InvalidRolloutPlan", reason: "UnknownDependency" })
+  })
+
 
   it("POST /deployments inside an always-open window proceeds", async () => {
     const res = await post("/deployments", { ...validTrigger, service: "windowed-open", window: "* * * * *" })

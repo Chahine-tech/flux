@@ -6,8 +6,16 @@ import { historyToJSON } from "@temporalio/common/lib/proto-utils"
 import { TestWorkflowEnvironment } from "@temporalio/testing"
 import { bundleWorkflowCode, Worker } from "@temporalio/worker"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { type DeploymentInput, type DeploymentResult, type DeploymentState, SEARCH_ATTRIBUTES } from "../src/deployment-input.ts"
+import {
+  type DeploymentInput,
+  type DeploymentResult,
+  type DeploymentState,
+  type MultiServiceResult,
+  SEARCH_ATTRIBUTES
+} from "../src/deployment-input.ts"
 import { makePayloadCodec } from "../src/payload-codec.ts"
+import { compileRolloutPlan } from "@flux/domain"
+import { ApplicationFailure } from "@temporalio/common"
 import type { DeploymentActivities } from "../src/activities/types.ts"
 
 // temporal.api.enums.v1.IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD
@@ -170,6 +178,68 @@ describe.skipIf(!shouldCapture)("history fixture capture", () => {
       const result = (await handle.result()) as DeploymentResult
       expect(result.kind).toBe("RolledBack")
       writeFixture("rollback", historyToJSON(await handle.fetchHistory()))
+    })
+  })
+
+  it("captures a dependency-ordered rollout losing a middle service", async () => {
+    //   db ──> api ──┐
+    //     └──> cache ┴──> web
+    // api fails, so web is skipped and cache still finishes. This one history
+    // exercises everything the parent's scheduler does: dependency gating,
+    // concurrency slots, the failure spread, and a Skipped outcome.
+    const compiled = compileRolloutPlan(["db", "api", "cache", "web"], {
+      api: ["db"],
+      cache: ["db"],
+      web: ["api", "cache"]
+    })
+    expect(compiled._tag).toBe("Compiled")
+    if (compiled._tag !== "Compiled") return
+
+    const child = (service: string): DeploymentInput => ({
+      ...baseInput,
+      service,
+      steps: [{ percent: 100, monitorMs: 0, requiresApproval: false }]
+    })
+
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowBundle,
+      activities: {
+        ...okActivities(),
+        healthCheck: async (probe: { readonly service: string }) => {
+          if (probe.service === "api") {
+            throw ApplicationFailure.nonRetryable("probe 503", "HealthCheckFailed")
+          }
+        }
+      },
+      dataConverter,
+      identity: "flux-capture-worker"
+    })
+    await worker.runUntil(async () => {
+      const handle = await client.workflow.start("multiServiceDeployment", {
+        taskQueue: TASK_QUEUE,
+        // Must equal the fixture's file name. The parent derives its children's
+        // ids from its own (`${parentId}-${service}`), and the replay harness
+        // feeds the file name back as the workflow id — capture it under
+        // anything else and replay reports a child-id mismatch. The two
+        // single-workflow fixtures do not care, because nothing in
+        // `deploymentWorkflow` reads its own id.
+        workflowId: "multi-service",
+        args: [{
+          services: [child("db"), child("api"), child("cache"), child("web")],
+          maxConcurrency: 4,
+          failFast: false,
+          onFailure: "abort-dependents",
+          plan: compiled.plan
+        }]
+      })
+      const result = (await handle.result()) as MultiServiceResult
+      expect(result.kind).toBe("SomeFailed")
+      const kinds = Object.fromEntries(result.perService.map((entry) => [entry.service, entry.result.kind]))
+      expect(kinds).toEqual({ db: "Succeeded", api: "Failed", cache: "Succeeded", web: "Skipped" })
+      writeFixture("multi-service", historyToJSON(await handle.fetchHistory()))
     })
   })
 }, 120_000)

@@ -13,6 +13,11 @@ import { makePayloadCodec } from "../src/payload-codec.ts"
  * production — fails here as a `DeterminismViolationError`, in the hermetic CI
  * job, with no cluster. Fixtures are regenerated deliberately (see
  * `capture-histories.test.ts`), never by CI.
+ *
+ * The workflow id replayed is the fixture's file name, because a history does
+ * not carry its own workflow id. That matters for any workflow that reads it:
+ * `multiServiceDeployment` names its children after its own id, so its fixture
+ * has to be captured under the same name as its file.
  */
 
 const workflowsPath = fileURLToPath(new URL("../src/workflows/index.ts", import.meta.url))
@@ -31,9 +36,10 @@ beforeAll(async () => {
 }, 60_000)
 
 describe("replay determinism lock", () => {
-  it("has the two committed scenarios", () => {
+  it("has the committed scenarios", () => {
     expect(fixtures).toContain("promotion.json")
     expect(fixtures).toContain("rollback.json")
+    expect(fixtures).toContain("multi-service.json")
   })
 
   it("stores the workflow input gzipped — the codec is part of what replay proves", () => {
