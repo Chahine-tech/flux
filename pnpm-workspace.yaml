@@ -31,13 +31,3 @@ catalog:
 minimumReleaseAgeExclude:
   - rolldown-plugin-dts@0.27.8
   - tsdown@0.22.7
-
-# The proto3-json-serializer override that lived here is gone. SDK 1.23 moved
-# historyToJSON/historyFromJSON onto protobufjs v8's own protojson and dropped
-# the dependency outright, which is the condition the old note set for removal.
-# The committed replay fixtures still parse and replay green. Measured what a
-# re-capture actually changes in the encoding, and it is one thing: a map
-# holding its default value is no longer emitted, so the started event's empty
-# `header.fields` disappears. A non-empty header still round-trips
-# (tracing.test.ts covers it). Everything else that moves on a re-capture is
-# the workflow having gained events since, not the codec.
