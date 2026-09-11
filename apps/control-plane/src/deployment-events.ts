@@ -1,4 +1,4 @@
-import { Context, type Duration, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule, Stream } from "effect"
+import { Clock, Context, type Duration, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule, Stream } from "effect"
 import type { DeploymentState } from "@flux/contracts"
 import { TemporalClient } from "./temporal-client.ts"
 
@@ -15,6 +15,14 @@ import { TemporalClient } from "./temporal-client.ts"
 export interface DeploymentEvent {
   readonly workflowId: string
   readonly state: DeploymentState
+  /**
+   * When this state was read, stamped *after* the query returned. `watch` uses
+   * it to drop a state older than one it has already emitted. Not a total order
+   * over a distributed read — a query can return a stale value — but it removes
+   * the interleaving that actually happens here, where a subscriber's own
+   * snapshot and a poller tick read the same workflow moments apart.
+   */
+  readonly readAt: number
 }
 
 export class DeploymentEvents extends Context.Service<DeploymentEvents, {
@@ -32,6 +40,33 @@ export interface DeploymentEventsConfig {
    * Defaults to a no-op so the poller stays decoupled from admission control.
    */
   readonly onDeploymentEnded?: (service: string) => Effect.Effect<void>
+  /**
+   * Called with the service name the first time a tick observes a deployment
+   * running. Used to re-seat admission after a control-plane restart: the STM
+   * map lives in memory, so a restart forgets every in-flight deployment and
+   * the global budget silently becomes too permissive while they are still
+   * running. Must be idempotent — the common case is a deployment this process
+   * admitted seconds ago, which is already seated.
+   * Defaults to a no-op so the poller stays decoupled from admission control.
+   */
+  readonly onDeploymentSeen?: (service: string) => Effect.Effect<void>
+}
+
+/**
+ * A per-subscription cursor that drops anything read before what it has already
+ * let through. Exported because the stream it guards cannot exercise it: in the
+ * poller's test harness a delta always carries a later stamp than the snapshot,
+ * so a test at that level would pass whether or not the guard exists. The
+ * interleaving it defends against needs two reads of the same workflow landing
+ * out of order, which is a race, not a sequence a test can stage.
+ */
+export const keepMonotonic = (): (entry: { readonly readAt: number }) => boolean => {
+  let latest = 0
+  return (entry) => {
+    if (entry.readAt < latest) return false
+    latest = entry.readAt
+    return true
+  }
 }
 
 /** Two states are equal for delta purposes when their observable fields match. */
@@ -52,6 +87,7 @@ export const layer = (
       const lastSeen = yield* Ref.make(HashMap.empty<string, DeploymentState>())
 
       const onEnded = config.onDeploymentEnded ?? (() => Effect.void)
+      const onSeen = config.onDeploymentSeen ?? (() => Effect.void)
 
       // One poll: publish a delta for every running deployment whose state
       // changed (or is newly seen), then release the slot of any deployment that
@@ -67,9 +103,14 @@ export const layer = (
           if (Option.isNone(state)) continue
 
           const prior = HashMap.get(previous, workflowId)
+          if (Option.isNone(prior)) {
+            // First sighting: seat it, in case this process did not admit it.
+            yield* onSeen(state.value.service)
+          }
           const changed = Option.isNone(prior) || !sameState(prior.value, state.value)
           if (changed) {
-            yield* PubSub.publish(pubsub, { workflowId, state: state.value })
+            const readAt = yield* Clock.currentTimeMillis
+            yield* PubSub.publish(pubsub, { workflowId, state: state.value, readAt })
           }
           next = HashMap.set(next, workflowId, state.value)
         }
@@ -85,7 +126,8 @@ export const layer = (
           if (Option.isSome(last)) {
             const final = yield* Effect.option(temporal.status(workflowId))
             if (Option.isSome(final) && final.value.outcome !== undefined) {
-              yield* PubSub.publish(pubsub, { workflowId, state: final.value })
+              const readAt = yield* Clock.currentTimeMillis
+              yield* PubSub.publish(pubsub, { workflowId, state: final.value, readAt })
             }
             yield* onEnded(last.value.service)
           }
@@ -110,16 +152,28 @@ export const layer = (
             // between the two is lost.
             const subscription = yield* PubSub.subscribe(pubsub)
             const current = yield* Effect.option(temporal.status(workflowId))
+            const readAt = yield* Clock.currentTimeMillis
 
             const deltas = Stream.fromSubscription(subscription).pipe(
               Stream.filter((event) => event.workflowId === workflowId),
-              Stream.map((event) => event.state)
+              Stream.map((event) => ({ state: event.state, readAt: event.readAt }))
             )
 
-            const stream = Option.match(current, {
+            const stamped = Option.match(current, {
               onNone: () => deltas,
-              onSome: (state) => Stream.concat(Stream.make(state), deltas)
+              onSome: (state) => Stream.concat(Stream.make({ state, readAt }), deltas)
             })
+
+            // Subscribing before reading the snapshot means a tick landing
+            // between the two is both published and reflected in the snapshot,
+            // and the two reads can land in either order — a subscriber could
+            // otherwise be shown `monitoring @ 10%` and then `health-checking
+            // @ 0%`. The cursor is created here, so it is local to one
+            // subscription rather than shared across them.
+            const stream = stamped.pipe(
+              Stream.filter(keepMonotonic()),
+              Stream.map((entry) => entry.state)
+            )
 
             // Subscribing before reading the snapshot means a poll landing
             // between the two is published *and* included in the snapshot, so

@@ -92,7 +92,9 @@ const deployments = HttpApiGroup.make("deployments")
     HttpApiEndpoint.post("triggerMulti", "/deployments/multi", {
       payload: TriggerMultiRequest,
       success: TriggerDeploymentResponse,
-      error: [InvalidRolloutPlan]
+      // A rollout is admitted as a unit, so it can be refused for the same two
+      // reasons a single deployment can.
+      error: [InvalidRolloutPlan, DeploymentBudgetExhausted, ServiceAlreadyDeploying]
     })
   )
   .add(

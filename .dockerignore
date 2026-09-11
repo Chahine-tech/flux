@@ -1,0 +1,19 @@
+# The image builds from the whole workspace (apps bundle their @flux/*
+# dependencies from source), so this keeps the build context to what is
+# actually needed to install and build.
+node_modules
+**/node_modules
+**/dist
+.turbo
+**/.turbo
+.git
+.github
+docs
+infra/demo
+scripts
+*.md
+docker-compose.yml
+**/*.tsbuildinfo
+**/*.db
+**/*.db-shm
+**/*.db-wal

@@ -20,8 +20,18 @@ import { DeploymentBudgetExhausted, ServiceAlreadyDeploying } from "@flux/contra
 export class AdmissionController extends Context.Service<AdmissionController, {
   /** Reserve a slot for `service`, or reject if the budget is full / it is already deploying. */
   readonly admit: (service: string) => Effect.Effect<void, DeploymentBudgetExhausted | ServiceAlreadyDeploying>
+  /**
+   * Reserve a slot for every service of a multi-service rollout, all or nothing.
+   * A rollout that cannot seat all of its services seats none of them, rather
+   * than starting half a rollout and discovering the budget mid-flight.
+   */
+  readonly admitAll: (
+    services: ReadonlyArray<string>
+  ) => Effect.Effect<void, DeploymentBudgetExhausted | ServiceAlreadyDeploying>
   /** Free the service's slot (idempotent). */
   readonly release: (service: string) => Effect.Effect<void>
+  /** Free every listed service's slot (idempotent). */
+  readonly releaseAll: (services: ReadonlyArray<string>) => Effect.Effect<void>
   /** The services currently holding a slot. */
   readonly inFlight: Effect.Effect<ReadonlyArray<string>>
 }>()("AdmissionController") {}
@@ -33,18 +43,29 @@ export const layer = (maxConcurrent: number): Layer.Layer<AdmissionController> =
       const budget = yield* TxSemaphore.make(maxConcurrent)
       const inflight = yield* TxHashMap.empty<string, true>()
 
-      const admit = (service: string) =>
-        Effect.tx(
-          Effect.gen(function*() {
-            if (yield* TxHashMap.has(inflight, service)) {
-              return yield* Effect.fail(new ServiceAlreadyDeploying({ service }))
-            }
-            if (!(yield* TxSemaphore.tryAcquire(budget))) {
-              return yield* Effect.fail(new DeploymentBudgetExhausted({ service, limit: maxConcurrent }))
-            }
-            yield* TxHashMap.set(inflight, service, true)
-          })
-        )
+      /** Seat one service. Runs inside the caller's transaction, never its own. */
+      const seat = (service: string) =>
+        Effect.gen(function*() {
+          if (yield* TxHashMap.has(inflight, service)) {
+            return yield* Effect.fail(new ServiceAlreadyDeploying({ service }))
+          }
+          if (!(yield* TxSemaphore.tryAcquire(budget))) {
+            return yield* Effect.fail(new DeploymentBudgetExhausted({ service, limit: maxConcurrent }))
+          }
+          yield* TxHashMap.set(inflight, service, true)
+        })
+
+      const admit = (service: string) => Effect.tx(seat(service))
+
+      /**
+       * All of them in one transaction. A failure anywhere rolls back the seats
+       * already taken in this attempt, which is the property that makes this
+       * worth STM rather than a loop over `admit`: seating four services out of
+       * six and then failing would leave four permits held for a rollout that
+       * never starts.
+       */
+      const admitAll = (services: ReadonlyArray<string>) =>
+        Effect.tx(Effect.forEach(services, seat, { discard: true }))
 
       const release = (service: string) =>
         Effect.tx(
@@ -56,6 +77,9 @@ export const layer = (maxConcurrent: number): Layer.Layer<AdmissionController> =
           })
         )
 
-      return { admit, release, inFlight: TxHashMap.keys(inflight) }
+      const releaseAll = (services: ReadonlyArray<string>) =>
+        Effect.forEach(services, release, { discard: true })
+
+      return { admit, admitAll, release, releaseAll, inFlight: TxHashMap.keys(inflight) }
     })
   )

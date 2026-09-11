@@ -129,11 +129,27 @@ services:
   # Minimal deploy target for trying flux locally: whoami answers 200 on any
   # path, so a canary's health check passes (point HEALTH_URL at :8088) and it
   # promotes 10 -> 50 -> 100. Opt-in:  docker compose --profile demo up -d demo-target
-  demo-target:
+  demo-target: 
     image: traefik/whoami
     profiles: ["demo"]
     ports:
       - "8088:80"
+
+  # Gives the demo canaries real metrics to read. Exposes one healthy service
+  # and one that breaches the error budget, so the promotion recording and the
+  # rollback recording both evaluate genuine numbers instead of an empty
+  # result set. Scraped by the prometheus job of the same name.
+  demo-metrics:
+    image: node:22-alpine
+    profiles: ["demo"]
+    command: node /srv/metrics.mjs
+    environment:
+      HEALTHY_SERVICE: api
+      BREACHING_SERVICE: checkout
+    ports:
+      - "9101:9101"
+    volumes:
+      - ./infra/demo:/srv:ro
 
 volumes:
   pgdata:

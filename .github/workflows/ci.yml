@@ -22,6 +22,34 @@ jobs:
 
       - run: pnpm turbo run typecheck test
 
+
+  # The images are the only artifacts nothing else in the repo exercises, so
+  # they are the only ones that can rot silently. Building them is cheap; the
+  # smoke check is what gives it teeth, because it loads every runtime
+  # dependency and so covers the two ways these images have actually broken:
+  # a dependency left out of the runtime manifest (the app bundle externalises
+  # more than `neverBundle`), and a base image whose libc cannot dlopen
+  # Temporal's prebuilt core-bridge.
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [worker, control-plane]
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: docker build -f apps/${{ matrix.app }}/Dockerfile -t flux-${{ matrix.app }}:ci .
+
+      - name: Runtime dependencies load inside the image
+        run: |
+          docker run --rm --entrypoint node flux-${{ matrix.app }}:ci --input-type=module -e '
+            const fs = await import("node:fs/promises")
+            const { dependencies } = JSON.parse(await fs.readFile("/srv/package.json", "utf8"))
+            for (const name of Object.keys(dependencies)) await import(name)
+            console.log("resolved:", Object.keys(dependencies).join(", "))
+          '
+
   # Real-cluster proofs: worker versioning, resource tuner, Schedules —
   # the capabilities the time-skipping test server does not implement. Runs the
   # project's own compose so CI exercises exactly what developers run.

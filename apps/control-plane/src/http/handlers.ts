@@ -64,6 +64,7 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
       }))
     .handle("triggerMulti", ({ payload }) =>
       Effect.gen(function*() {
+        const admission = yield* AdmissionController
         const temporal = yield* TemporalClient
         // Compile the declared dependencies into a topological plan here, on
         // the Effect side. The workflow receives the plan, never the graph:
@@ -78,10 +79,17 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
         if (compiled._tag !== "Compiled") {
           return yield* new InvalidRolloutPlan(describePlanFailure(compiled))
         }
+        // Admission covers the whole rollout, all or nothing. Without this the
+        // parent starts its children with `startChild`, which never comes back
+        // through the control plane, so a twenty-service rollout would walk
+        // straight past the global budget. Compiling first means a rollout with
+        // a bad dependency graph is rejected before it takes any seats.
+        const services = payload.services.map((service) => service.service)
+        yield* admission.admitAll(services)
         const workflowId = yield* temporal.startMulti({
           ...(rest as unknown as MultiServiceInput),
           plan: compiled.plan
-        })
+        }).pipe(Effect.onError(() => admission.releaseAll(services)))
         return { workflowId }
       }))
     .handle("enableDrift", ({ payload }) =>

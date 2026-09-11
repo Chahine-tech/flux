@@ -6,7 +6,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "dev": "tsx src/main.ts"
+    "dev": "tsx src/main.ts",
+    "build": "tsdown",
+    "runtime-manifest": "tsx scripts/runtime-manifest.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -25,6 +27,7 @@
     "@types/node": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "tsdown": "^0.22.7"
   }
 }

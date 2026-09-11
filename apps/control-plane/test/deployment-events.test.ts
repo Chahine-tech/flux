@@ -3,7 +3,7 @@ import { Effect, Fiber, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { DeploymentState } from "@flux/contracts"
 import { expect } from "vitest"
-import { DeploymentEvents, layer } from "../src/deployment-events.ts"
+import { DeploymentEvents, keepMonotonic, layer } from "../src/deployment-events.ts"
 import { TemporalClient } from "../src/temporal-client.ts"
 
 /**
@@ -41,6 +41,35 @@ const makeSetup = () => {
   const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
   return { EventsLive, setState: (next: DeploymentState) => (current = next) }
 }
+
+describe("keepMonotonic", () => {
+  it("lets a forward sequence through untouched", () => {
+    const keep = keepMonotonic()
+    expect([{ readAt: 1 }, { readAt: 2 }, { readAt: 3 }].filter(keep)).toHaveLength(3)
+  })
+
+  it("drops a state read before one already emitted", () => {
+    const keep = keepMonotonic()
+    // The shape of the bug: a subscriber's snapshot is read at 10, then a
+    // poller tick that had read the same workflow at 5 publishes afterwards.
+    const kept = [{ readAt: 10 }, { readAt: 5 }, { readAt: 12 }].filter(keep)
+    expect(kept.map((entry) => entry.readAt)).toEqual([10, 12])
+  })
+
+  it("keeps a repeat of the same instant, leaving deduplication to sameState", () => {
+    const keep = keepMonotonic()
+    expect([{ readAt: 7 }, { readAt: 7 }].filter(keep)).toHaveLength(2)
+  })
+
+  it("gives each subscription its own cursor", () => {
+    const first = keepMonotonic()
+    const second = keepMonotonic()
+    expect(first({ readAt: 100 })).toBe(true)
+    // A fresh subscriber is not held back by another one's position.
+    expect(second({ readAt: 3 })).toBe(true)
+    expect(first({ readAt: 3 })).toBe(false)
+  })
+})
 
 describe("deployment events poller", () => {
   it.effect("emits the current state, then only real deltas (unchanged ticks suppressed)", () => {
@@ -136,6 +165,51 @@ describe("deployment events poller", () => {
       running = [] // the deployment finishes
       yield* TestClock.adjust("5 seconds") // next tick sees it gone → released
       expect(ended).toEqual(["api"])
+    }).pipe(Effect.provide(EventsLive))
+  })
+
+  it.effect("re-seats a deployment the first time a tick sees it running", () => {
+    // What a control-plane restart looks like from the poller's side: the STM
+    // admission map is empty, but deployments are already running. Without this
+    // the budget stays too permissive until they finish.
+    const seen: Array<string> = []
+    let running = ["wf1"]
+    const FakeTemporal = Layer.succeed(TemporalClient, {
+      start: () => Effect.succeed("wf1"),
+      startMulti: () => Effect.succeed("multi"),
+      status: () => Effect.succeed(state(10)),
+      list: () => Effect.succeed([]),
+      listRunningIds: () => Effect.sync(() => running),
+      listClosed: () => Effect.succeed([]),
+      approve: () => Effect.void,
+      abort: () => Effect.void,
+      ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
+      disableDrift: () => Effect.void
+    })
+    const EventsLive = layer({
+      pollInterval: "5 seconds",
+      maxTracked: 100,
+      onDeploymentSeen: (service) => Effect.sync(() => void seen.push(service))
+    }).pipe(Layer.provide(FakeTemporal))
+
+    return Effect.gen(function*() {
+      yield* DeploymentEvents
+      // The poll loop is forked, so let its first tick run.
+      yield* TestClock.adjust("1 second")
+      expect(seen).toEqual(["api"])
+
+      // Later ticks must not re-seat it: admission is idempotent, but firing
+      // every 5s would bury the real signal.
+      yield* TestClock.adjust("5 seconds")
+      yield* TestClock.adjust("5 seconds")
+      expect(seen).toEqual(["api"])
+
+      // It ends, then a new deployment of the same service starts: seen again.
+      running = []
+      yield* TestClock.adjust("5 seconds")
+      running = ["wf1"]
+      yield* TestClock.adjust("5 seconds")
+      expect(seen).toEqual(["api", "api"])
     }).pipe(Effect.provide(EventsLive))
   })
 

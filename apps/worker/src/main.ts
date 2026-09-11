@@ -1,12 +1,11 @@
 import { createServer } from "node:http"
-import { fileURLToPath } from "node:url"
 import { NativeConnection, Worker } from "@temporalio/worker"
 import { activityInterceptors, createActivities, makePayloadCodec, metricsPrometheusText } from "@flux/orchestration"
 import type { ManagedRuntime } from "effect"
 import type { AppServices } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
 import { ensureSearchAttributes } from "./search-attributes.ts"
-import { pollerBehaviors, tuner, versioningOptions } from "./worker-config.ts"
+import { pollerBehaviors, tuner, versioningOptions, workflowSource } from "./worker-config.ts"
 
 /**
  * flux worker — Temporal process.
@@ -45,21 +44,21 @@ const main = async (): Promise<void> => {
 
   try {
     const workerDeploymentOptions = versioningOptions()
+    const workflows = workflowSource()
     const worker = await Worker.create({
       connection,
       namespace,
       taskQueue: TASK_QUEUE,
-      workflowsPath: fileURLToPath(import.meta.resolve("@flux/orchestration/workflows")),
+      ...workflows.source,
       activities: createActivities(runtime),
       // Large payloads are gzip-compressed on the wire and in history.
       // The codec runs here on the main thread, never inside the workflow VM.
       dataConverter: { payloadCodecs: [makePayloadCodec()] },
-      // One trace end to end: the workflow-side hop is a bundled module
-      // (Effect-free); the activity-side hop reads it back here.
-      interceptors: {
-        activity: [activityInterceptors],
-        workflowModules: [fileURLToPath(import.meta.resolve("@flux/orchestration/tracing/workflow-interceptors"))]
-      },
+      // Both hops of the single trace in one object. The workflow-side modules
+      // come from `workflowSource()` and are empty on the prebuilt-bundle
+      // route; splitting this into two `interceptors` keys would let the
+      // second silently overwrite the first.
+      interceptors: { activity: [activityInterceptors], workflowModules: workflows.workflowModules },
       tuner,
       // Poller autoscaling: the number of open polls tracks the queue
       // backlog between the configured min/max, so idle workers stay cheap and a

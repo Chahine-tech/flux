@@ -37,7 +37,13 @@ const MainLive = Layer.unwrap(
         return DeploymentEvents.layer({
           pollInterval: cfg.pollIntervalMs,
           maxTracked: cfg.maxTracked,
-          onDeploymentEnded: (service) => admission.release(service)
+          onDeploymentEnded: (service) => admission.release(service),
+          // Re-seat what is already running. `admit` fails with
+          // ServiceAlreadyDeploying for the deployments this process itself
+          // admitted, which is the expected case and is ignored; it only
+          // actually takes a seat after a restart, or for a deployment started
+          // through another path.
+          onDeploymentSeen: (service) => Effect.ignore(admission.admit(service))
         })
       })
     )

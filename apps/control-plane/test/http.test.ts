@@ -229,13 +229,32 @@ describe("control plane HTTP API", () => {
   })
 
   it("POST /deployments/multi starts a multi-service rollout", async () => {
+    // Distinct service names: a rollout is admitted as a unit now, and the
+    // mock has no poller to free seats, so every test in this file competes for
+    // the same admission map — which is exactly what it does in production.
     const res = await post("/deployments/multi", {
-      services: [validTrigger, { ...validTrigger, service: "web" }],
+      services: ["orders", "shipping"].map((service) => ({ ...validTrigger, service })),
       maxConcurrency: 2,
       failFast: true
     })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ workflowId: "multi" })
+  })
+
+  it("POST /deployments/multi refuses a rollout whose service is already deploying", async () => {
+    const rollout = (services: ReadonlyArray<string>) => ({
+      services: services.map((service) => ({ ...validTrigger, service })),
+      maxConcurrency: 2,
+      failFast: true
+    })
+    expect((await post("/deployments/multi", rollout(["payments", "search"]))).status).toBe(200)
+
+    const second = await post("/deployments/multi", rollout(["search", "catalog"]))
+    expect(second.status).toBe(409)
+    expect(await second.json()).toMatchObject({ _tag: "ServiceAlreadyDeploying", service: "search" })
+
+    // "catalog" never got a seat, so it is still free to deploy on its own.
+    expect((await post("/deployments", { ...validTrigger, service: "catalog" })).status).toBe(200)
   })
 
   it("POST /drift enables a drift-check schedule for a service", async () => {

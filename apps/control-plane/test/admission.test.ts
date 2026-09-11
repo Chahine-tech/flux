@@ -49,4 +49,43 @@ describe("admission control", () => {
       const rejected = yield* Effect.flip(admission.admit("api"))
       expect(rejected._tag).toBe("ServiceAlreadyDeploying")
     }).pipe(Effect.provide(layer(10))))
+
+  it.effect("seats a whole rollout at once", () =>
+    Effect.gen(function*() {
+      const admission = yield* AdmissionController
+      yield* admission.admitAll(["db", "api", "web"])
+      const inFlight = yield* admission.inFlight
+      expect([...inFlight].sort()).toEqual(["api", "db", "web"])
+    }).pipe(Effect.provide(layer(4))))
+
+  it.effect("seats none of a rollout that does not fit the budget", () =>
+    Effect.gen(function*() {
+      const admission = yield* AdmissionController
+      // Four services, budget of three: the transaction must roll back the
+      // seats it had already taken rather than start three quarters of a
+      // rollout. This is the property that makes it worth STM instead of a
+      // loop over `admit`.
+      const rejected = yield* Effect.flip(admission.admitAll(["db", "api", "cache", "web"]))
+      expect(rejected._tag).toBe("DeploymentBudgetExhausted")
+
+      const inFlight = yield* admission.inFlight
+      expect(inFlight).toHaveLength(0)
+
+      // And the budget is intact: a smaller rollout still fits entirely.
+      yield* admission.admitAll(["db", "api", "cache"])
+      expect(yield* admission.inFlight).toHaveLength(3)
+    }).pipe(Effect.provide(layer(3))))
+
+  it.effect("refuses a rollout containing a service already deploying, seating none", () =>
+    Effect.gen(function*() {
+      const admission = yield* AdmissionController
+      yield* admission.admit("api")
+
+      const rejected = yield* Effect.flip(admission.admitAll(["db", "api", "web"]))
+      expect(rejected._tag).toBe("ServiceAlreadyDeploying")
+
+      // "db" was seated before the clash was reached; it must not have stuck.
+      const inFlight = yield* admission.inFlight
+      expect([...inFlight].sort()).toEqual(["api"])
+    }).pipe(Effect.provide(layer(10))))
 })

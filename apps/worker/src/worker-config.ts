@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url"
 import type { WorkerTuner } from "@temporalio/worker"
 
 /**
@@ -67,5 +68,34 @@ export const pollerBehaviors = (env: NodeJS.ProcessEnv = process.env) => {
       Number(env.WORKER_ACT_POLLERS_MIN ?? 1),
       Number(env.WORKER_ACT_POLLERS_MAX ?? 20)
     )
+  }
+}
+
+/**
+ * Where the worker gets its workflow code, and with it the workflow-side
+ * tracing interceptors — the two travel together.
+ *
+ * `FLUX_WORKFLOW_BUNDLE` points at a bundle built ahead of time
+ * (`scripts/bundle-workflows.ts`), which is how a container image runs: the
+ * SDK cannot resolve `@flux/orchestration/workflows` from a packaged app, and
+ * bundling once at build time beats bundling on every worker boot.
+ *
+ * Unset, the worker resolves the workspace source and the SDK bundles at
+ * startup, which is what `pnpm --filter @flux/worker dev` has always done.
+ *
+ * The interceptors move with the choice: on the bundle route they are compiled
+ * in (`workflowInterceptorModules`), so passing `workflowModules` here as well
+ * would have nothing to resolve them against.
+ */
+export const workflowSource = (env: NodeJS.ProcessEnv = process.env) => {
+  const bundle = env.FLUX_WORKFLOW_BUNDLE
+  if (bundle !== undefined && bundle !== "") {
+    // Compiled into the bundle already; asking for them again here would
+    // give the SDK a module path it cannot resolve.
+    return { source: { workflowBundle: { codePath: bundle } }, workflowModules: [] as Array<string> }
+  }
+  return {
+    source: { workflowsPath: fileURLToPath(import.meta.resolve("@flux/orchestration/workflows")) },
+    workflowModules: [fileURLToPath(import.meta.resolve("@flux/orchestration/tracing/workflow-interceptors"))]
   }
 }

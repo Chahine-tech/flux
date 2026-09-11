@@ -7,7 +7,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "dev": "tsx src/main.ts",
-    "demo": "tsx src/demo.ts"
+    "demo": "tsx src/demo.ts",
+    "bundle-workflows": "tsx scripts/bundle-workflows.ts",
+    "build": "tsdown",
+    "runtime-manifest": "tsx scripts/runtime-manifest.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -26,6 +29,7 @@
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "@temporalio/activity": "catalog:"
+    "@temporalio/activity": "catalog:",
+    "tsdown": "^0.22.7"
   }
 }

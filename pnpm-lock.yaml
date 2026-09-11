@@ -154,6 +154,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
+      tsdown:
+        specifier: ^0.22.7
+        version: 0.22.7(tsx@4.23.0)(typescript@7.0.2)
       tsx:
         specifier: 'catalog:'
         version: 4.23.0
@@ -203,6 +206,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
+      tsdown:
+        specifier: ^0.22.7
+        version: 0.22.7(tsx@4.23.0)(typescript@7.0.2)
       tsx:
         specifier: 'catalog:'
         version: 4.23.0
@@ -3644,7 +3650,7 @@ snapshots:
   vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0):
     dependencies:
       lightningcss: 1.32.0
-      picomatch: 4.0.5
+      picomatch: 4.0.7
       postcss: 8.5.16
       rolldown: 1.1.5
       tinyglobby: 0.2.17

@@ -11,3 +11,10 @@ coverage/
 *.db
 *.db-shm
 *.db-wal
+
+# local demo/recording tooling (the gif in docs/ is the published artifact).
+# Anchored: an unanchored `scripts/` also swallows infra/temporal/scripts/,
+# which the compose needs committed.
+/scripts/
+# casts are the raw recordings; only the rendered gif is published
+docs/*.cast
