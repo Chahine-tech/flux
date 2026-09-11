@@ -9,7 +9,7 @@ orchestration is a Temporal workflow, so a crash or a long monitoring window
 doesn't lose it. It drives nginx or Caddy and reads Prometheus. No Kubernetes.
 
 [![Effect](https://img.shields.io/badge/Effect-4.0--beta-ff5faa.svg)](https://effect.website/)
-[![Temporal](https://img.shields.io/badge/Temporal-1.21-000000.svg)](https://temporal.io/)
+[![Temporal](https://img.shields.io/badge/Temporal-1.23-000000.svg)](https://temporal.io/)
 
 ![A canary promoting itself 10% → 50% → 100%](docs/demo.gif)
 
@@ -66,6 +66,11 @@ Choices that go past plumbing:
 - Admission control (one deployment per service, plus a global cap) is a single
   STM transaction: a `TxSemaphore` and a `TxHashMap` updated together, so two
   concurrent triggers can't over-admit.
+- A rollback outranks new work. The compensation that restores the previous
+  version is scheduled at the top task-queue priority, so when several
+  deployments share a worker and one goes bad, getting users off the bad version
+  jumps ahead of the others' traffic shifts. A test reads it back off the
+  recorded history.
 - `status --watch` streams live state over a websocket, fed by a `PubSub` a poller
   writes to.
 - `/stats` answers questions Temporal's visibility can't — rollback rate per
@@ -107,12 +112,15 @@ Choices that go past plumbing:
   function before admission; it never reaches the workflow. (Building it caught
   that Effect's `Cron` is second-precise, so a range window needs the clock
   floored to the minute.)
-- The workflow's code has actually evolved once, the way you would in
-  production: a new `started` notification added behind `workflow.patched()`.
-  The committed replay histories prove both directions: old histories replay
-  the old path, and the same edit without the patch guard fails the replay
-  test with a determinism error. The lock also refuses `deprecatePatch` while
-  those histories exist, which is the patch lifecycle doing its job.
+- The workflow's code has evolved a few times the way it would in production:
+  new activity calls added behind `workflow.patched()`. The committed replay
+  histories prove both directions: old histories replay the old path, and the
+  same edit without the patch guard fails the replay test with a determinism
+  error. The lock also refuses `deprecatePatch` while those histories exist,
+  which is the patch lifecycle doing its job. That's the manual way to change a
+  running workflow; the worker also runs with deployment-based Worker Versioning
+  in CI, and [docs/versioning.md](docs/versioning.md) is a side-by-side of the
+  two, manual `patched()` against automatic versioning.
 - A rollback drafts its own postmortem. When a canary rolls back, an activity
   asks a language model which metric regressed and why, through Effect's own
   provider-agnostic `LanguageModel` port. The use case never names a provider;
@@ -149,7 +157,7 @@ A pnpm + Turborepo monorepo.
 Node ≥ 22, pnpm 11. The backing services run in Docker:
 
 ```bash
-docker compose up -d postgresql temporal prometheus jaeger temporal-ui
+docker compose up -d --wait postgresql temporal temporal-namespace prometheus jaeger temporal-ui
 pnpm install
 pnpm typecheck && pnpm test
 ```

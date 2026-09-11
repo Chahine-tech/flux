@@ -46,7 +46,7 @@ export const tuner: WorkerTuner = {
  * Grow and shrink the number of open poll calls with the queue backlog, between
  * min and max. An idle worker holds a single poller, a burst of deployments
  * scales up, all in one process. Needs a Temporal server >= 1.28.0 (compose runs
- * 1.29).
+ * 1.31).
  *
  * Separate from the resource tuner, and they stack: poller behavior is how many
  * tasks the worker asks for, the tuner is how many it can run at once. Exported

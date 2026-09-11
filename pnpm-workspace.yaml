@@ -15,14 +15,14 @@ catalog:
   "@effect/sql-sqlite-node": 4.0.0-beta.102
   "@effect/vitest": 4.0.0-beta.102
   "@effect/opentelemetry": 4.0.0-beta.102
-  "@temporalio/activity": ^1.21.1
-  "@temporalio/client": ^1.21.1
-  "@temporalio/common": ^1.21.1
-  "@temporalio/nexus": ^1.21.1
-  "@temporalio/testing": ^1.21.1
-  "@temporalio/worker": ^1.21.1
-  "@temporalio/workflow": ^1.21.1
-  "nexus-rpc": ^0.0.2
+  "@temporalio/activity": ^1.23.0
+  "@temporalio/client": ^1.23.0
+  "@temporalio/common": ^1.23.0
+  "@temporalio/nexus": ^1.23.0
+  "@temporalio/testing": ^1.23.0
+  "@temporalio/worker": ^1.23.0
+  "@temporalio/workflow": ^1.23.0
+  "nexus-rpc": ^0.0.3
   "@types/node": ^24.13.3
   typescript: ^7.0.2
   tsx: ^4.19.0
@@ -32,10 +32,12 @@ minimumReleaseAgeExclude:
   - rolldown-plugin-dts@0.27.8
   - tsdown@0.22.7
 
-# historyToJSON (used to capture the replay fixtures) only works with
-# proto3-json-serializer 2.0.0: 2.0.1+ throws on bytes map values before the
-# SDK can fix them up — documented in @temporalio/common's own proto-utils
-# (googleapis/proto3-json-serializer-nodejs#103). Scoped to the one package
-# that needs it; remove once the Temporal SDK pins or fixes this itself.
-overrides:
-  "@temporalio/common>proto3-json-serializer": 2.0.0
+# The proto3-json-serializer override that lived here is gone. SDK 1.23 moved
+# historyToJSON/historyFromJSON onto protobufjs v8's own protojson and dropped
+# the dependency outright, which is the condition the old note set for removal.
+# The committed replay fixtures still parse and replay green. Measured what a
+# re-capture actually changes in the encoding, and it is one thing: a map
+# holding its default value is no longer emitted, so the started event's empty
+# `header.fields` disappears. A non-empty header still round-trips
+# (tracing.test.ts covers it). Everything else that moves on a re-capture is
+# the workflow having gained events since, not the codec.

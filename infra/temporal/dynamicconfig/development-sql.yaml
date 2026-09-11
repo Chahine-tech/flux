@@ -6,15 +6,10 @@ frontend.enableUpdateWorkflowExecution:
 frontend.enableUpdateWorkflowExecutionAsyncAccepted:
   - value: true
 
-# Nexus — required on server <1.30, which is not enabled by default.
-# The frontend HTTP port (7243) and its address are already the config
-# template's own defaults (services.frontend.rpc.httpPort,
-# clusterMetadata.clusterInformation.active.httpAddress) — nothing to change
-# there. This deployment is single-cluster and single-node, so the callback
-# just points the server at itself. Dev-only: unrestricted + insecure allowed.
-component.nexusoperations.callback.endpoint.template:
-  - value: "http://127.0.0.1:7243/namespaces/{{.NamespaceName}}/nexus/callback"
-component.callbacks.allowedAddresses:
-  - value:
-      - Pattern: "*"
-        AllowInsecure: true
+# Nexus used to need two keys here (a callback endpoint template pointing the
+# server at itself, and an allow-list permitting that insecure address),
+# because before server 1.30 Nexus was off by default and callbacks were routed
+# by URL. Server 1.31 removed the feature flag and made token-based callback
+# routing the default, so both keys are gone. Verified rather than assumed:
+# the cross-namespace canary in apps/worker/test/nexus.test.ts passes against
+# 1.31.2 with this file exactly as it stands.
