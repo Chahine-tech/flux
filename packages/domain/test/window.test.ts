@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest"
 import { Cron, Result, Schema } from "effect"
-import { FastCheck } from "effect/testing"
+import * as FastCheck from "fast-check"
 import { expect } from "vitest"
 import { DeploymentWindow, evaluateWindow } from "../src/window.ts"
 

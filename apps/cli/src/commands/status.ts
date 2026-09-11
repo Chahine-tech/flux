@@ -33,13 +33,13 @@ const once = (workflowId: string) =>
  * default, or a live stream from the control plane with `--watch`.
  */
 export const status = Command.make("status", {
-  workflowId: Flag.string("workflow-id").pipe(
+  workflowId: Flag.String("workflow-id").pipe(
     Flag.withDescription("Deployment workflow id (from `flux deploy`)")
   ),
-  watch: Flag.boolean("watch").pipe(
+  watch: Flag.Boolean("watch").pipe(
     Flag.withDescription("Stream live updates from the control plane instead of a single snapshot")
   ),
-  controlPlane: Flag.string("control-plane").pipe(
+  controlPlane: Flag.String("control-plane").pipe(
     Flag.withDefault("http://localhost:8080"),
     Flag.withDescription("Control plane base URL (used with --watch)")
   )

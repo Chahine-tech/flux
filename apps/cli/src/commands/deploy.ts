@@ -16,28 +16,28 @@ import { clientLayer, makeClient } from "../control-plane.ts"
  * Canary steps and thresholds use built-in defaults.
  */
 export const deploy = Command.make("deploy", {
-  service: Flag.string("service").pipe(Flag.withDescription("Service name")),
-  version: Flag.string("version").pipe(Flag.withDescription("New version to roll out")),
-  previousVersion: Flag.string("previous-version").pipe(
+  service: Flag.String("service").pipe(Flag.withDescription("Service name")),
+  version: Flag.String("version").pipe(Flag.withDescription("New version to roll out")),
+  previousVersion: Flag.String("previous-version").pipe(
     Flag.withDescription("Version to roll back to on regression")
   ),
-  monitor: Flag.string("monitor").pipe(
+  monitor: Flag.String("monitor").pipe(
     Flag.withDefault("30s"),
     Flag.withDescription("Monitoring window per canary step")
   ),
-  strategy: Flag.string("strategy").pipe(
+  strategy: Flag.String("strategy").pipe(
     Flag.withDefault("canary"),
     Flag.withDescription('Rollout strategy: "canary" (default) or "blue-green"')
   ),
-  bake: Flag.string("bake").pipe(
+  bake: Flag.String("bake").pipe(
     Flag.withDefault("30s"),
     Flag.withDescription("Bake window after the blue/green flip (only for --strategy blue-green)")
   ),
-  window: Flag.string("window").pipe(
+  window: Flag.String("window").pipe(
     Flag.optional,
     Flag.withDescription('Only deploy inside this cron window, e.g. "* 9-17 * * 1-5"')
   ),
-  controlPlane: Flag.string("control-plane").pipe(
+  controlPlane: Flag.String("control-plane").pipe(
     Flag.withDefault("http://localhost:8080"),
     Flag.withDescription("Control plane base URL")
   )

@@ -16,16 +16,16 @@ import * as TemporalClient from "./temporal-client.ts"
  * layer is interrupted, at which point the scoped Temporal connection closes.
  */
 const config = Config.all({
-  port: Config.number("PORT").pipe(Config.withDefault(8080)),
-  temporalAddress: Config.string("TEMPORAL_ADDRESS").pipe(Config.withDefault("localhost:7233")),
-  temporalNamespace: Config.string("TEMPORAL_NAMESPACE").pipe(Config.withDefault("default")),
-  pollIntervalMs: Config.number("POLL_INTERVAL_MS").pipe(Config.withDefault(2000)),
-  maxTracked: Config.number("MAX_TRACKED_DEPLOYMENTS").pipe(Config.withDefault(200)),
-  readModelDb: Config.string("READ_MODEL_DB").pipe(Config.withDefault("flux-read-model.db")),
-  projectionIntervalMs: Config.number("PROJECTION_INTERVAL_MS").pipe(Config.withDefault(5000)),
-  maxConcurrent: Config.number("MAX_CONCURRENT_DEPLOYMENTS").pipe(Config.withDefault(10)),
+  port: Config.Number("PORT").pipe(Config.withDefault(8080)),
+  temporalAddress: Config.String("TEMPORAL_ADDRESS").pipe(Config.withDefault("localhost:7233")),
+  temporalNamespace: Config.String("TEMPORAL_NAMESPACE").pipe(Config.withDefault("default")),
+  pollIntervalMs: Config.Number("POLL_INTERVAL_MS").pipe(Config.withDefault(2000)),
+  maxTracked: Config.Number("MAX_TRACKED_DEPLOYMENTS").pipe(Config.withDefault(200)),
+  readModelDb: Config.String("READ_MODEL_DB").pipe(Config.withDefault("flux-read-model.db")),
+  projectionIntervalMs: Config.Number("PROJECTION_INTERVAL_MS").pipe(Config.withDefault(5000)),
+  maxConcurrent: Config.Number("MAX_CONCURRENT_DEPLOYMENTS").pipe(Config.withDefault(10)),
   // Bearer token for the HTTP API; unset → auth disabled (local dev).
-  apiToken: Config.redacted("API_TOKEN").pipe(Config.option)
+  apiToken: Config.Redacted("API_TOKEN").pipe(Config.option)
 })
 
 const MainLive = Layer.unwrap(

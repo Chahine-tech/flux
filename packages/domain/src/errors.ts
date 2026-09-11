@@ -5,7 +5,7 @@ import { ThresholdBreach } from "./thresholds.ts"
  * Domain-level tagged errors — the business-meaningful failures that flow
  * through activities and are part of the ubiquitous language.
  *
- * Built with `Schema.TaggedErrorClass` so they are schema-validated,
+ * Built with `Schema.TaggedError` so they are schema-validated,
  * yieldable in `Effect.gen`, matchable as tagged union members, and
  * serializable across the Temporal boundary.
  *
@@ -14,7 +14,7 @@ import { ThresholdBreach } from "./thresholds.ts"
  */
 
 /** The new version failed its health check before any traffic was shifted. */
-export class HealthCheckFailed extends Schema.TaggedErrorClass<HealthCheckFailed>()(
+export class HealthCheckFailed extends Schema.TaggedError<HealthCheckFailed>()(
   "HealthCheckFailed",
   {
     service: Schema.String,
@@ -24,7 +24,7 @@ export class HealthCheckFailed extends Schema.TaggedErrorClass<HealthCheckFailed
 ) {}
 
 /** Observed metrics crossed the failure budget during a canary step. */
-export class MetricsThresholdExceeded extends Schema.TaggedErrorClass<MetricsThresholdExceeded>()(
+export class MetricsThresholdExceeded extends Schema.TaggedError<MetricsThresholdExceeded>()(
   "MetricsThresholdExceeded",
   {
     service: Schema.String,
@@ -34,7 +34,7 @@ export class MetricsThresholdExceeded extends Schema.TaggedErrorClass<MetricsThr
 ) {}
 
 /** The rollback itself failed — the most severe outcome, needs paging. */
-export class RollbackFailed extends Schema.TaggedErrorClass<RollbackFailed>()(
+export class RollbackFailed extends Schema.TaggedError<RollbackFailed>()(
   "RollbackFailed",
   {
     service: Schema.String,

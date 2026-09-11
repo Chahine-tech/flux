@@ -8,7 +8,7 @@ watches error rate and latency, and rolls back if they get worse. The
 orchestration is a Temporal workflow, so a crash or a long monitoring window
 doesn't lose it. It drives nginx or Caddy and reads Prometheus. No Kubernetes.
 
-[![Effect](https://img.shields.io/badge/Effect-4.0--beta-ff5faa.svg)](https://effect.website/)
+[![Effect](https://img.shields.io/badge/Effect-4.0--rc-ff5faa.svg)](https://effect.website/)
 [![Temporal](https://img.shields.io/badge/Temporal-1.23-000000.svg)](https://temporal.io/)
 
 ![A canary promoting itself 10% → 50% → 100%](docs/demo.gif)
@@ -118,9 +118,7 @@ Choices that go past plumbing:
   same edit without the patch guard fails the replay test with a determinism
   error. The lock also refuses `deprecatePatch` while those histories exist,
   which is the patch lifecycle doing its job. That's the manual way to change a
-  running workflow; the worker also runs with deployment-based Worker Versioning
-  in CI, and [docs/versioning.md](docs/versioning.md) is a side-by-side of the
-  two, manual `patched()` against automatic versioning.
+  running workflow;
 - A rollback drafts its own postmortem. When a canary rolls back, an activity
   asks a language model which metric regressed and why, through Effect's own
   provider-agnostic `LanguageModel` port. The use case never names a provider;
@@ -157,7 +155,7 @@ A pnpm + Turborepo monorepo.
 Node ≥ 22, pnpm 11. The backing services run in Docker:
 
 ```bash
-docker compose up -d --wait postgresql temporal temporal-namespace prometheus jaeger temporal-ui
+docker compose up -d postgresql temporal temporal-namespace prometheus jaeger temporal-ui
 pnpm install
 pnpm typecheck && pnpm test
 ```
@@ -211,5 +209,5 @@ bugs the type checker was happy with.
 
 ---
 
-*Effect is pinned to an exact beta (`4.0.0-beta.102`); upgrades are deliberate.
+*Effect is pinned to an exact release candidate (`4.0.0-rc.113`); upgrades are deliberate.
 MIT licensed.*

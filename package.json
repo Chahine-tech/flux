@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@11.5.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "typecheck": "turbo run typecheck",
@@ -12,7 +12,7 @@
     "dev": "turbo run dev"
   },
   "devDependencies": {
-    "@effect/language-service": "^0.86.6",
+    "@effect/language-service": "^0.87.2",
     "@types/node": "catalog:",
     "turbo": "^2.10.4"
   }

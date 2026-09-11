@@ -78,6 +78,9 @@ services:
       retries: 60
 
   # Registers the `default` namespace, then exits. auto-setup did this too.
+  # Do not name this in `docker compose up --wait`: compose counts a named
+  # service that exits as a failure even on exit 0, so the command returns 1
+  # after everything came up fine. CI runs it as `compose run --rm` instead.
   temporal-namespace:
     image: temporalio/admin-tools:1.31.2
     depends_on:

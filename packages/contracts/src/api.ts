@@ -15,7 +15,7 @@ import { TriggerDeploymentRequest, TriggerDeploymentResponse, TriggerMultiReques
  */
 
 /** Bearer token missing or wrong. */
-export class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
   "Unauthorized",
   {},
   { httpApiStatus: 401 }
@@ -32,35 +32,35 @@ export class Authorization extends HttpApiMiddleware.Service<Authorization>()("f
 }) {}
 
 /** No deployment with this id is known to Temporal. */
-export class DeploymentNotFound extends Schema.TaggedErrorClass<DeploymentNotFound>()(
+export class DeploymentNotFound extends Schema.TaggedError<DeploymentNotFound>()(
   "DeploymentNotFound",
   { workflowId: Schema.String },
   { httpApiStatus: 404 }
 ) {}
 
 /** The action is invalid in the deployment's current state (e.g. approving one that isn't awaiting approval). */
-export class DeploymentNotActionable extends Schema.TaggedErrorClass<DeploymentNotActionable>()(
+export class DeploymentNotActionable extends Schema.TaggedError<DeploymentNotActionable>()(
   "DeploymentNotActionable",
   { workflowId: Schema.String, reason: Schema.String },
   { httpApiStatus: 409 }
 ) {}
 
 /** The global concurrent-deployment budget is full (admission control). */
-export class DeploymentBudgetExhausted extends Schema.TaggedErrorClass<DeploymentBudgetExhausted>()(
+export class DeploymentBudgetExhausted extends Schema.TaggedError<DeploymentBudgetExhausted>()(
   "DeploymentBudgetExhausted",
   { service: Schema.String, limit: Schema.Finite },
   { httpApiStatus: 429 }
 ) {}
 
 /** The service already has a deployment in flight — one at a time (admission control). */
-export class ServiceAlreadyDeploying extends Schema.TaggedErrorClass<ServiceAlreadyDeploying>()(
+export class ServiceAlreadyDeploying extends Schema.TaggedError<ServiceAlreadyDeploying>()(
   "ServiceAlreadyDeploying",
   { service: Schema.String },
   { httpApiStatus: 409 }
 ) {}
 
 /** The deploy was triggered outside its allowed window; retry after `nextAllowed`. */
-export class OutsideDeploymentWindow extends Schema.TaggedErrorClass<OutsideDeploymentWindow>()(
+export class OutsideDeploymentWindow extends Schema.TaggedError<OutsideDeploymentWindow>()(
   "OutsideDeploymentWindow",
   { service: Schema.String, window: Schema.String, nextAllowed: Schema.String },
   { httpApiStatus: 422 }

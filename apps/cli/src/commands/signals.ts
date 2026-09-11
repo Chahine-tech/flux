@@ -2,7 +2,7 @@ import { Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { updateDeployment } from "../temporal.ts"
 
-const workflowIdFlag = Flag.string("workflow-id").pipe(
+const workflowIdFlag = Flag.String("workflow-id").pipe(
   Flag.withDescription("Deployment workflow id (from `flux deploy`)")
 )
 

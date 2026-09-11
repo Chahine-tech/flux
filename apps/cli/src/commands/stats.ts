@@ -8,7 +8,7 @@ import { clientLayer, makeClient } from "../control-plane.ts"
  * rate, mean canary duration).
  */
 export const stats = Command.make("stats", {
-  controlPlane: Flag.string("control-plane").pipe(
+  controlPlane: Flag.String("control-plane").pipe(
     Flag.withDefault("http://localhost:8080"),
     Flag.withDescription("Control plane base URL")
   )

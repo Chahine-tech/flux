@@ -1,24 +1,30 @@
 import { describe, it } from "@effect/vitest"
 import { Duration, Schema } from "effect"
-import { FastCheck } from "effect/testing"
+import { Arbitrary } from "effect/unstable/arbitrary"
 import { expect } from "vitest"
 import { DurationFromShorthand } from "../src/duration.ts"
 import { evaluateThresholds, type MetricReadings } from "../src/thresholds.ts"
+
+/**
+ * Generation is Schema-first since Effect's rc: the core package dropped its
+ * dependencies and `it.prop` no longer accepts a fast-check `Arbitrary`, only a
+ * `Schema` or one from `effect/unstable/arbitrary`. The bounds below are the
+ * same ones the hand-built fast-check generators used, expressed as checks on
+ * the schema instead of arguments to a generator.
+ */
 
 const decode = Schema.decodeUnknownSync(DurationFromShorthand)
 const encode = Schema.encodeUnknownSync(DurationFromShorthand)
 
 describe("evaluateThresholds (property-based)", () => {
-  // Each pair is one rule (max) and its observed reading.
-  const pairs = FastCheck.array(
-    FastCheck.record({
-      max: FastCheck.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true }),
-      reading: FastCheck.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true })
-    }),
-    { maxLength: 8 }
+  // Each pair is one rule (max) and its observed reading. Finite excludes NaN
+  // and the infinities, which is what noNaN/noDefaultInfinity bought before.
+  const Reading = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1000 }))
+  const Pairs = Schema.Array(Schema.Struct({ max: Reading, reading: Reading })).check(
+    Schema.isMaxLength(8)
   )
 
-  it.prop("breaches exactly the rules whose reading exceeds max", [pairs], ([samples]) => {
+  it.prop("breaches exactly the rules whose reading exceeds max", [Pairs], ([samples]) => {
     const rules = samples.map((s, i) => ({ name: `m${i}`, query: `q${i}`, max: s.max }))
     const readings: MetricReadings = Object.fromEntries(samples.map((s, i) => [`m${i}`, s.reading]))
 
@@ -37,10 +43,18 @@ describe("evaluateThresholds (property-based)", () => {
 })
 
 describe("DurationFromShorthand (property-based)", () => {
-  const shorthand = FastCheck.tuple(
-    FastCheck.integer({ min: 0, max: 1_000_000 }),
-    FastCheck.constantFrom("ms", "s", "m", "h", "d")
-  ).map(([n, unit]) => `${n}${unit}`)
+  // The shorthand is a number glued to a unit; generate the two parts under
+  // their own constraints and join them, rather than generating from the
+  // pattern check on the schema itself.
+  const shorthand = Arbitrary.map(
+    Arbitrary.schema(
+      Schema.Struct({
+        n: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
+        unit: Schema.Literals(["ms", "s", "m", "h", "d"])
+      })
+    ),
+    ({ n, unit }) => `${n}${unit}`
+  )
 
   it.prop("decodes then re-encodes to the same Duration", [shorthand], ([text]) => {
     const duration = decode(text)

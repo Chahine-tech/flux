@@ -11,7 +11,7 @@ import { Schema } from "effect"
  */
 
 /** The metrics backend could not be reached or returned unusable data. */
-export class MetricsUnavailable extends Schema.TaggedErrorClass<MetricsUnavailable>()(
+export class MetricsUnavailable extends Schema.TaggedError<MetricsUnavailable>()(
   "MetricsUnavailable",
   {
     service: Schema.String,
@@ -20,7 +20,7 @@ export class MetricsUnavailable extends Schema.TaggedErrorClass<MetricsUnavailab
 ) {}
 
 /** The router backend rejected or failed to apply a traffic-weight change. */
-export class RouterUnavailable extends Schema.TaggedErrorClass<RouterUnavailable>()(
+export class RouterUnavailable extends Schema.TaggedError<RouterUnavailable>()(
   "RouterUnavailable",
   {
     service: Schema.String,
@@ -29,7 +29,7 @@ export class RouterUnavailable extends Schema.TaggedErrorClass<RouterUnavailable
 ) {}
 
 /** Delivering a notification failed (non-fatal to a deployment). */
-export class NotifyFailed extends Schema.TaggedErrorClass<NotifyFailed>()(
+export class NotifyFailed extends Schema.TaggedError<NotifyFailed>()(
   "NotifyFailed",
   {
     channel: Schema.String,
@@ -38,7 +38,7 @@ export class NotifyFailed extends Schema.TaggedErrorClass<NotifyFailed>()(
 ) {}
 
 /** The changelog source could not be reached, or has no history for the versions. */
-export class ChangelogUnavailable extends Schema.TaggedErrorClass<ChangelogUnavailable>()(
+export class ChangelogUnavailable extends Schema.TaggedError<ChangelogUnavailable>()(
   "ChangelogUnavailable",
   {
     service: Schema.String,

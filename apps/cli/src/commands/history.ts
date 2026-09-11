@@ -4,11 +4,11 @@ import { listDeployments } from "../temporal.ts"
 
 /** `flux history` — list recent deployments via advanced-visibility queries. */
 export const history = Command.make("history", {
-  service: Flag.string("service").pipe(
+  service: Flag.String("service").pipe(
     Flag.withDefault(""),
     Flag.withDescription("Filter by service (default: all services)")
   ),
-  last: Flag.integer("last").pipe(
+  last: Flag.Int("last").pipe(
     Flag.withDefault(10),
     Flag.withDescription("Maximum number of deployments to show")
   )

@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "fast-check": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

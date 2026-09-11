@@ -11,10 +11,10 @@ import { clientLayer, makeClient } from "../control-plane.ts"
  * shared contract before being sent to the control plane.
  */
 export const deployMulti = Command.make("deploy-multi", {
-  config: Flag.string("config").pipe(
+  config: Flag.String("config").pipe(
     Flag.withDescription("Path to a JSON file: { services: [...], maxConcurrency, failFast }")
   ),
-  controlPlane: Flag.string("control-plane").pipe(
+  controlPlane: Flag.String("control-plane").pipe(
     Flag.withDefault("http://localhost:8080"),
     Flag.withDescription("Control plane base URL")
   )

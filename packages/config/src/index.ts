@@ -13,57 +13,57 @@ import { parse as parseToml } from "toml"
  */
 
 const temporal = Config.all({
-  address: Config.string("address").pipe(Config.withDefault("localhost:7233")),
-  namespace: Config.string("namespace").pipe(Config.withDefault("default")),
-  taskQueue: Config.string("task_queue").pipe(Config.withDefault("flux-deployments"))
+  address: Config.String("address").pipe(Config.withDefault("localhost:7233")),
+  namespace: Config.String("namespace").pipe(Config.withDefault("default")),
+  taskQueue: Config.String("task_queue").pipe(Config.withDefault("flux-deployments"))
 }).pipe(Config.nested("temporal"))
 
 const metrics = Config.all({
   // Which MetricsPort adapter backs monitoring: "prometheus" (default) or
   // "http-json" for apps exposing a plain JSON metrics endpoint.
-  type: Config.string("type").pipe(Config.withDefault("prometheus")),
-  prometheusUrl: Config.string("prometheus_url").pipe(Config.withDefault("http://localhost:9090")),
+  type: Config.String("type").pipe(Config.withDefault("prometheus")),
+  prometheusUrl: Config.String("prometheus_url").pipe(Config.withDefault("http://localhost:9090")),
   // Optional bearer token for the http-json backend's endpoints.
-  httpJsonToken: Config.redacted("http_json_token").pipe(Config.withDefault(Redacted.make("")))
+  httpJsonToken: Config.Redacted("http_json_token").pipe(Config.withDefault(Redacted.make("")))
 }).pipe(Config.nested("metrics"))
 
 const router = Config.all({
-  type: Config.string("type").pipe(Config.withDefault("nginx")),
+  type: Config.String("type").pipe(Config.withDefault("nginx")),
   // nginx: where the generated upstream config goes, and how to reload.
-  configPath: Config.string("config_path").pipe(
+  configPath: Config.String("config_path").pipe(
     Config.withDefault("/etc/nginx/conf.d/flux-upstream.conf")
   ),
-  reloadCommand: Config.string("reload_command").pipe(Config.withDefault("nginx -s reload")),
+  reloadCommand: Config.String("reload_command").pipe(Config.withDefault("nginx -s reload")),
   // caddy: the admin API and the `apps.http.servers.<name>` flux manages.
-  adminUrl: Config.string("admin_url").pipe(Config.withDefault("http://localhost:2019")),
-  serverName: Config.string("server_name").pipe(Config.withDefault("flux"))
+  adminUrl: Config.String("admin_url").pipe(Config.withDefault("http://localhost:2019")),
+  serverName: Config.String("server_name").pipe(Config.withDefault("flux"))
 }).pipe(Config.nested("router"))
 
 const thresholds = Config.all({
-  maxErrorRate: Config.number("max_error_rate").pipe(Config.withDefault(0.01)),
-  maxP99LatencyMs: Config.number("max_p99_latency_ms").pipe(Config.withDefault(500))
+  maxErrorRate: Config.Number("max_error_rate").pipe(Config.withDefault(0.01)),
+  maxP99LatencyMs: Config.Number("max_p99_latency_ms").pipe(Config.withDefault(500))
 }).pipe(Config.nested("thresholds"))
 
 const notifications = Config.all({
-  slackWebhook: Config.redacted("slack_webhook").pipe(Config.option)
+  slackWebhook: Config.Redacted("slack_webhook").pipe(Config.option)
 }).pipe(Config.nested("notifications"))
 
 // The optional LLM postmortem. The key is redacted and defaults to empty:
 // unset, the postmortem no-ops rather than failing. `baseUrl` is overridable so
 // a test can point the Anthropic adapter at a local double.
 const ai = Config.all({
-  anthropicApiKey: Config.redacted("anthropic_api_key").pipe(Config.withDefault(Redacted.make(""))),
-  model: Config.string("model").pipe(Config.withDefault("claude-opus-4-8")),
-  baseUrl: Config.string("base_url").pipe(Config.withDefault("https://api.anthropic.com"))
+  anthropicApiKey: Config.Redacted("anthropic_api_key").pipe(Config.withDefault(Redacted.make(""))),
+  model: Config.String("model").pipe(Config.withDefault("claude-opus-4-8")),
+  baseUrl: Config.String("base_url").pipe(Config.withDefault("https://api.anthropic.com"))
 }).pipe(Config.nested("ai"))
 
 // What grounds the postmortem: commits between versions via GitHub compare.
 // `repoTemplate` maps a service to `owner/repo` (`{service}` is substituted);
 // empty disables the source and the postmortem falls back to metrics only.
 const changelog = Config.all({
-  repoTemplate: Config.string("repo_template").pipe(Config.withDefault("")),
-  githubToken: Config.redacted("github_token").pipe(Config.withDefault(Redacted.make(""))),
-  baseUrl: Config.string("base_url").pipe(Config.withDefault("https://api.github.com"))
+  repoTemplate: Config.String("repo_template").pipe(Config.withDefault("")),
+  githubToken: Config.Redacted("github_token").pipe(Config.withDefault(Redacted.make(""))),
+  baseUrl: Config.String("base_url").pipe(Config.withDefault("https://api.github.com"))
 }).pipe(Config.nested("changelog"))
 
 /** The full, typed application configuration. */

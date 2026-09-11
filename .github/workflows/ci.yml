@@ -39,14 +39,22 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # `--wait` blocks until the server's healthcheck passes and both one-shot
-      # setup containers have exited 0. It replaces a hand-rolled poll loop that
-      # exec'd the `temporal` CLI inside the server container: the
-      # `temporalio/server` image ships no CLI, only `temporal-server`.
-      - run: docker compose up -d --wait postgresql temporal temporal-namespace
+      # `--wait` replaces a hand-rolled poll loop that exec'd the `temporal` CLI
+      # inside the server container: the `temporalio/server` image ships no CLI,
+      # only `temporal-server`. It must only name long-running services, though
+      # — compose treats a named service that exits as a failure even when it
+      # exits 0, so listing `temporal-namespace` here fails the job after
+      # everything came up correctly. The one-shot runs as its own step instead,
+      # where its exit code is the script's own. `run` still honours the
+      # `service_healthy` dependency, so ordering is unchanged.
+      - run: docker compose up -d --wait postgresql temporal
+
+      - run: docker compose run --rm temporal-namespace
 
       - run: FLUX_REAL_TEMPORAL=1 pnpm --filter @flux/worker --filter @flux/control-plane test
 
+      # The namespace step runs with `run --rm`, so its output is already inline
+      # above and it leaves no container to read logs from.
       - name: Temporal logs
         if: failure()
-        run: docker compose logs --tail 80 temporal-setup temporal temporal-namespace
+        run: docker compose logs --tail 80 temporal-setup temporal

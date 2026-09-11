@@ -10,11 +10,11 @@ allowBuilds:
 
 # effect v4 is a fast-moving beta, so pin it exact and bump on purpose.
 catalog:
-  effect: 4.0.0-beta.102
-  "@effect/platform-node": 4.0.0-beta.102
-  "@effect/sql-sqlite-node": 4.0.0-beta.102
-  "@effect/vitest": 4.0.0-beta.102
-  "@effect/opentelemetry": 4.0.0-beta.102
+  effect: 4.0.0-rc.113
+  "@effect/platform-node": 4.0.0-rc.113
+  "@effect/sql-sqlite-node": 4.0.0-rc.113
+  "@effect/vitest": 4.0.0-rc.113
+  "@effect/opentelemetry": 4.0.0-rc.113
   "@temporalio/activity": ^1.23.0
   "@temporalio/client": ^1.23.0
   "@temporalio/common": ^1.23.0
@@ -26,8 +26,12 @@ catalog:
   "@types/node": ^24.13.3
   typescript: ^7.0.2
   tsx: ^4.19.0
-  vitest: ^4.1.10
+  vitest: ^5.0.0
+  # effect rc ships zero dependencies and no longer re-exports FastCheck from
+  # effect/testing, so the property-based domain tests depend on it directly.
+  "fast-check": ^4.10.0
 
 minimumReleaseAgeExclude:
   - rolldown-plugin-dts@0.27.8
   - tsdown@0.22.7
+  - fast-check@4.10.0
