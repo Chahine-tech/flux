@@ -23,8 +23,8 @@ jobs:
       - run: pnpm turbo run typecheck test
 
       # The chart, without a cluster. `helm template` against every values file
-      # catches the things that actually break it — a mistrimmed `-}}` gluing
-      # two keys together, a self-including checksum annotation recursing — and
+      # catches the things that actually break it: a mistrimmed `-}}` gluing
+      # two keys together, a self-including checksum annotation recursing, and
       # costs seconds. Whether it *runs* is the `kubernetes` job's question.
       - name: Chart renders
         run: |
@@ -51,7 +51,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: docker build -f apps/${{ matrix.app }}/Dockerfile -t flux-${{ matrix.app }}:ci .
+      # Same order as the kubernetes job: the images assemble, they do not build.
+      - run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @flux/${{ matrix.app }} build
+          if [ "${{ matrix.app }}" = "worker" ]; then pnpm --filter @flux/worker bundle-workflows; fi
+          pnpm --filter @flux/${{ matrix.app }} runtime-manifest
+          docker build -f apps/${{ matrix.app }}/Dockerfile -t flux-${{ matrix.app }}:ci .
 
       - name: Runtime dependencies load inside the image
         run: |
@@ -69,7 +75,7 @@ jobs:
   # no cheaper proof.
   #
   # k3d rather than kind because k3d is what this was developed and verified
-  # against locally, and it ships metrics-server — which the HPA needs and a
+  # against locally, and it ships metrics-server, which the HPA needs and a
   # bare kind cluster does not have.
   kubernetes:
     runs-on: ubuntu-latest
@@ -85,7 +91,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm --filter @flux/cli build
+      # The images assemble a build made here rather than building inside
+      # themselves. An earlier version ran `pnpm install` in the Dockerfile and
+      # died on an npm download; it was also reinstalling what this job had
+      # just installed.
+      - name: Build the artifacts the images assemble
+        run: |
+          pnpm --filter @flux/worker build
+          pnpm --filter @flux/worker bundle-workflows
+          pnpm --filter @flux/worker runtime-manifest
+          pnpm --filter @flux/control-plane build
+          pnpm --filter @flux/control-plane runtime-manifest
 
       - run: |
           docker build -f apps/worker/Dockerfile -t flux-worker:dev .
@@ -112,8 +128,12 @@ jobs:
 
       - run: helm install flux deploy/kubernetes/chart --wait --timeout 300s
 
+      # The plumbing is the job's, the assertion is the test's, same split as
+      # the compose tier.
       - name: A canary survives its worker being evicted
-        run: node deploy/kubernetes/eviction-check.mjs
+        run: |
+          kubectl port-forward svc/flux-control-plane 18080:8080 &
+          FLUX_K8S=1 pnpm --filter @flux/worker test
 
       - name: Cluster state on failure
         if: failure()
@@ -123,7 +143,7 @@ jobs:
           kubectl logs -l app.kubernetes.io/component=worker --tail=60 || true
           kubectl logs -l app.kubernetes.io/component=control-plane --tail=60 || true
 
-  # Real-cluster proofs: worker versioning, resource tuner, Schedules —
+  # Real-cluster proofs: worker versioning, resource tuner, Schedules:
   # the capabilities the time-skipping test server does not implement. Runs the
   # project's own compose so CI exercises exactly what developers run.
   real-temporal:
@@ -143,7 +163,7 @@ jobs:
       # `--wait` replaces a hand-rolled poll loop that exec'd the `temporal` CLI
       # inside the server container: the `temporalio/server` image ships no CLI,
       # only `temporal-server`. It must only name long-running services, though
-      # — compose treats a named service that exits as a failure even when it
+      # compose treats a named service that exits as a failure even when it
       # exits 0, so listing `temporal-namespace` here fails the job after
       # everything came up correctly. The one-shot runs as its own step instead,
       # where its exit code is the script's own. `run` still honours the

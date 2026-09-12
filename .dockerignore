@@ -4,6 +4,10 @@
 node_modules
 **/node_modules
 **/dist
+# ...except the built artifacts the images assemble. The build runs on the host
+# now, so these are the only things the Dockerfiles copy.
+!apps/worker/dist
+!apps/control-plane/dist
 .turbo
 **/.turbo
 .git

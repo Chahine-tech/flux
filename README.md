@@ -189,8 +189,8 @@ than as a distribution: the question it answers is how a durable deployment
 system behaves when the orchestrator running it can evict its processes.
 
 A canary runs entirely in-cluster there, and the one experiment worth a cluster
-is `eviction-check.mjs`: delete the worker pod mid-monitor and the canary still
-completes. The recovery is not the heartbeat timeout the SIGKILL test provokes:
+is `apps/worker/test/kubernetes.test.ts`: delete the worker pod mid-monitor and
+the canary still completes. The recovery is not the heartbeat timeout the SIGKILL test provokes:
 a draining worker hands its activity task back to the queue and it is
 redelivered, with no failure recorded, which is faster.
 

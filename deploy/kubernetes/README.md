@@ -18,9 +18,19 @@ Elasticsearch by default.
 
 Needs a cluster, `helm`, and the two images built.
 
+The images assemble a build, they do not produce one, so the order matters:
+`build` compiles, `bundle-workflows` produces the deterministic workflow bundle
+the worker loads, and `runtime-manifest` derives the `package.json` the image
+installs from. Building inside the image instead would reinstall the whole
+workspace on every layer cache miss.
+
 ```bash
-pnpm --filter @flux/worker build && pnpm --filter @flux/worker bundle-workflows
+pnpm --filter @flux/worker build
+pnpm --filter @flux/worker bundle-workflows
+pnpm --filter @flux/worker runtime-manifest
 pnpm --filter @flux/control-plane build
+pnpm --filter @flux/control-plane runtime-manifest
+
 docker build -f apps/worker/Dockerfile -t flux-worker:dev .
 docker build -f apps/control-plane/Dockerfile -t flux-control-plane:dev .
 
@@ -53,13 +63,18 @@ Tear down with `k3d cluster delete flux-lab`.
 ## The one experiment
 
 ```bash
-node deploy/kubernetes/eviction-check.mjs
+kubectl port-forward svc/flux-control-plane 18080:8080 &
+FLUX_K8S=1 pnpm --filter @flux/worker test
 ```
 
-Starts a canary, waits until its monitor activity is genuinely in flight, deletes
-the worker pod running it, and asserts the canary still completes. This is what
-justifies a cluster: everything else about the chart is settled by
-`helm template` without one.
+`apps/worker/test/kubernetes.test.ts` starts a canary, waits until its monitor
+activity is genuinely in flight, deletes the worker pod running it, and asserts
+the canary still completes. This is what justifies a cluster: everything else
+about the chart is settled by `helm template` without one.
+
+It is gated on `FLUX_K8S=1` and skips otherwise, like the other tests that need
+something running. The port-forward stays outside the test, the same way the
+compose tier leaves Docker to whoever runs it.
 
 It is not the same proof as the SIGKILL test in `apps/worker/test/`. That one
 kills a process; this goes through Kubernetes' termination lifecycle: SIGTERM,
