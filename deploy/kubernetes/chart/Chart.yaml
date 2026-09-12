@@ -1,0 +1,9 @@
+apiVersion: v2
+name: flux
+description: >-
+  Progressive deployment orchestrator on Temporal and Effect. This chart
+  deploys flux itself; it is not a way to do canary deployments with Kubernetes
+  primitives, which flux deliberately does not use.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

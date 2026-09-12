@@ -1,0 +1,112 @@
+# Temporal from plain manifests rather than the official chart, which pulls
+# Cassandra or Elasticsearch by default and is dead weight here (D40). Same
+# shape as the compose: an init container migrates the schema before the server
+# starts, and a Job registers the namespace once it is up.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: temporal-dynamicconfig
+data:
+  development-sql.yaml: |
+    frontend.enableUpdateWorkflowExecution:
+      - value: true
+    frontend.enableUpdateWorkflowExecutionAsyncAccepted:
+      - value: true
+    # Fairness keyed by service (D43), so a twenty-service rollout shares the
+    # queue instead of queueing ahead of a single deployment.
+    matching.enableFairness:
+      - value: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+spec:
+  selector: { app: temporal }
+  ports:
+    - { name: grpc, port: 7233 }
+    - { name: http, port: 7243 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: temporal }
+  template:
+    metadata:
+      labels: { app: temporal }
+    spec:
+      initContainers:
+        # The half of the retired auto-setup image that is still needed (D36).
+        # An initContainer rather than a Job: "migrate, then start" is exactly
+        # what init containers express, and it re-runs harmlessly because
+        # create and update-schema are both no-ops when already applied.
+        - name: schema
+          image: temporalio/admin-tools:1.31.2
+          env:
+            - { name: SQL_PASSWORD, value: temporal }
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              until nc -z postgresql 5432; do echo "waiting for postgresql"; sleep 2; done
+              for db in temporal temporal_visibility; do
+                dir=$([ "$db" = temporal ] && echo temporal || echo visibility)
+                temporal-sql-tool --plugin postgres12 --ep postgresql -p 5432 -u temporal --db "$db" create
+                temporal-sql-tool --plugin postgres12 --ep postgresql -p 5432 -u temporal --db "$db" setup-schema -v 0.0
+                temporal-sql-tool --plugin postgres12 --ep postgresql -p 5432 -u temporal --db "$db" \
+                  update-schema -d "/etc/temporal/schema/postgresql/v12/$dir/versioned"
+              done
+      containers:
+        - name: temporal
+          image: temporalio/server:1.31.2
+          env:
+            - { name: DB, value: postgres12 }
+            - { name: DB_PORT, value: "5432" }
+            - { name: POSTGRES_USER, value: temporal }
+            - { name: POSTGRES_PWD, value: temporal }
+            - { name: POSTGRES_SEEDS, value: postgresql }
+            - { name: DYNAMIC_CONFIG_FILE_PATH, value: config/dynamicconfig/development-sql.yaml }
+            # Otherwise the entrypoint binds only the pod's own IP and the
+            # readiness probe, which talks to localhost, never goes green (D36).
+            - { name: BIND_ON_IP, value: "0.0.0.0" }
+            - { name: TEMPORAL_ALLOW_NO_AUTH, value: "true" }
+          ports:
+            - { name: grpc, containerPort: 7233 }
+            - { name: http, containerPort: 7243 }
+          readinessProbe:
+            tcpSocket: { port: grpc }
+            periodSeconds: 5
+            failureThreshold: 30
+          volumeMounts:
+            - { name: dynamicconfig, mountPath: /etc/temporal/config/dynamicconfig, readOnly: true }
+      volumes:
+        - name: dynamicconfig
+          configMap: { name: temporal-dynamicconfig }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: temporal-namespace
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: namespace
+          image: temporalio/admin-tools:1.31.2
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              until temporal operator cluster health --address temporal:7233; do
+                echo "waiting for temporal"; sleep 3
+              done
+              temporal operator namespace describe -n default --address temporal:7233 >/dev/null 2>&1 \
+                || temporal operator namespace create -n default --address temporal:7233
+              echo "namespace default ready"

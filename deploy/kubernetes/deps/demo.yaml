@@ -1,0 +1,192 @@
+# The thing being canaried, plus the metrics a canary reads. The lab's subject,
+# not part of flux.
+#
+# The interesting translation from the compose: there, one whoami container
+# answered for several versions through network aliases. Here it is a Service
+# per version, all selecting the same pods — which is what makes the dial
+# addresses flux writes into Caddy (`api-v2:80`) resolve, and what lets the
+# adapter's `versionOf` inverse recover a version from an address (D44).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-target
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: demo-target }
+  template:
+    metadata:
+      labels: { app: demo-target }
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami
+          ports: [{ containerPort: 80 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-target
+spec:
+  selector: { app: demo-target }
+  ports: [{ port: 80 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v1
+spec:
+  selector: { app: demo-target }
+  # 8080 because flux's `backendAddress` is fixed at that port; the chart
+  # adapts to flux rather than the other way round. whoami still listens on 80.
+  ports: [{ port: 8080, targetPort: 80 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v2
+spec:
+  selector: { app: demo-target }
+  # 8080 because flux's `backendAddress` is fixed at that port; the chart
+  # adapts to flux rather than the other way round. whoami still listens on 80.
+  ports: [{ port: 8080, targetPort: 80 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v3
+spec:
+  selector: { app: demo-target }
+  # 8080 because flux's `backendAddress` is fixed at that port; the chart
+  # adapts to flux rather than the other way round. whoami still listens on 80.
+  ports: [{ port: 8080, targetPort: 80 }]
+---
+# The exporter of D41: without it a canary queries a service nobody scrapes,
+# gets an empty result, and promotes because nothing contradicted it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-metrics
+data:
+  metrics.mjs: |
+    /**
+     * Demo metrics exporter — gives the README recordings something real to read.
+     *
+     * Without this, a demo canary queries Prometheus for a service nothing scrapes,
+     * gets an empty result, and promotes because there is no contradicting data
+     * rather than because the metrics were good. That is honest at the CLI level
+     * and hollow underneath (D41).
+     *
+     * So this exposes two services at once, both with counters that actually climb:
+     *   - HEALTHY_SERVICE   ~0.1% 5xx, p99 well under the 500ms budget
+     *   - BREACHING_SERVICE ~8%   5xx, which crosses the 1% error budget
+     *
+     * A canary on the first promotes on real numbers; a canary on the second rolls
+     * back on real numbers. Nothing is faked: the adapter really fetches, PromQL
+     * really evaluates, and the saga really runs.
+     *
+     * Values are derived from elapsed time rather than held in memory, so every
+     * scrape is exact and a restart cannot produce a counter that goes backwards
+     * mid-window. A static file would not work at all: the rule is a `rate()` over
+     * a counter, and the rate of a constant is zero.
+     *
+     * `rate()` over [1m] needs two scrapes before it reports anything, so give this
+     * ~30s after `docker compose --profile demo up` before recording.
+     */
+    import { createServer } from "node:http"
+
+    const PORT = Number(process.env.PORT ?? 9101)
+    const HEALTHY_SERVICE = process.env.HEALTHY_SERVICE ?? "api"
+    const BREACHING_SERVICE = process.env.BREACHING_SERVICE ?? "checkout"
+    const REQUESTS_PER_SECOND = Number(process.env.REQUESTS_PER_SECOND ?? 50)
+    const HEALTHY_ERROR_RATIO = Number(process.env.HEALTHY_ERROR_RATIO ?? 0.001)
+    const BREACHING_ERROR_RATIO = Number(process.env.BREACHING_ERROR_RATIO ?? 0.08)
+
+    const startedAt = Date.now()
+
+    /** Cumulative histogram shape: p99 lands around 95ms, far below the 500ms rule. */
+    const BUCKETS = [
+      [0.005, 0.2],
+      [0.01, 0.5],
+      [0.025, 0.8],
+      [0.05, 0.95],
+      [0.1, 0.995],
+      [0.25, 1],
+      [0.5, 1],
+      [1, 1],
+      [2.5, 1],
+      [5, 1]
+    ]
+
+    const seriesFor = (service, errorRatio, elapsedSeconds) => {
+      const total = Math.floor(REQUESTS_PER_SECOND * elapsedSeconds)
+      const errors = Math.floor(total * errorRatio)
+      const ok = total - errors
+
+      const lines = [
+        `http_requests_total{service="${service}",status="200"} ${ok}`,
+        `http_requests_total{service="${service}",status="500"} ${errors}`
+      ]
+      for (const [le, cumulative] of BUCKETS) {
+        lines.push(
+          `http_request_duration_seconds_bucket{service="${service}",le="${le}"} ${Math.floor(total * cumulative)}`
+        )
+      }
+      lines.push(`http_request_duration_seconds_bucket{service="${service}",le="+Inf"} ${total}`)
+      lines.push(`http_request_duration_seconds_count{service="${service}"} ${total}`)
+      lines.push(`http_request_duration_seconds_sum{service="${service}"} ${(total * 0.02).toFixed(3)}`)
+      return lines
+    }
+
+    const render = () => {
+      const elapsedSeconds = (Date.now() - startedAt) / 1000
+      return [
+        "# HELP http_requests_total Demo request counter by status.",
+        "# TYPE http_requests_total counter",
+        "# HELP http_request_duration_seconds Demo request latency histogram.",
+        "# TYPE http_request_duration_seconds histogram",
+        ...seriesFor(HEALTHY_SERVICE, HEALTHY_ERROR_RATIO, elapsedSeconds),
+        ...seriesFor(BREACHING_SERVICE, BREACHING_ERROR_RATIO, elapsedSeconds),
+        ""
+      ].join("\n")
+    }
+
+    createServer((request, response) => {
+      if (request.url !== "/metrics") {
+        response.writeHead(404).end()
+        return
+      }
+      response.writeHead(200, { "content-type": "text/plain; version=0.0.4" }).end(render())
+    }).listen(PORT, () => {
+      console.log(
+        `[flux-demo] metrics on :${PORT}/metrics — ` +
+          `${HEALTHY_SERVICE} healthy (${HEALTHY_ERROR_RATIO * 100}% 5xx), ` +
+          `${BREACHING_SERVICE} breaching (${BREACHING_ERROR_RATIO * 100}% 5xx)`
+      )
+    })
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: demo-metrics }
+  template:
+    metadata:
+      labels: { app: demo-metrics }
+    spec:
+      containers:
+        - name: metrics
+          image: node:24-alpine
+          command: ["node", "/srv/metrics.mjs"]
+          env:
+            - { name: HEALTHY_SERVICE, value: api }
+            - { name: BREACHING_SERVICE, value: checkout }
+          ports: [{ containerPort: 9101 }]
+          volumeMounts:
+            - { name: src, mountPath: /srv, readOnly: true }
+      volumes:
+        - name: src
+          configMap: { name: demo-metrics }

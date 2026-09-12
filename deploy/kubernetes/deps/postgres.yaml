@@ -1,0 +1,40 @@
+# PostgreSQL for Temporal. Part of the lab, not of flux: the chart deploys flux,
+# these manifests provide the cluster it talks to.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+spec:
+  selector: { app: postgresql }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: postgresql }
+  template:
+    metadata:
+      labels: { app: postgresql }
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:16-alpine
+          env:
+            - { name: POSTGRES_USER, value: temporal }
+            - { name: POSTGRES_PASSWORD, value: temporal }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "temporal"] }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+      volumes:
+        # Ephemeral on purpose: this is a laboratory, and a fresh cluster each
+        # time is a feature when the point is watching things break.
+        - { name: data, emptyDir: {} }

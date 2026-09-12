@@ -1,0 +1,100 @@
+{{- if eq .Values.router.type "caddy" }}
+{{- /*
+The router flux drives. Caddy and not nginx, and not by taste: the nginx
+adapter renders a config file and signals a process, so it needs to share a
+filesystem and a process namespace with nginx, which means a sidecar in the
+worker's pod, tying the router's lifecycle to the worker's scaling. Caddy's admin
+API is HTTP, so it crosses pods and is an ordinary Deployment (D40, D44).
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-caddy
+  labels:
+    {{- include "flux.labels" . | nindent 4 }}
+data:
+  caddy.json: |
+    {
+      "admin": { "listen": "0.0.0.0:2019" },
+      "apps": {
+        "http": {
+          "servers": {
+            {{ .Values.router.serverName | quote }}: {
+              "listen": [":8090"],
+              "routes": []
+            }
+          }
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-caddy
+  labels:
+    {{- include "flux.labels" . | nindent 4 }}
+    app.kubernetes.io/component: caddy
+spec:
+  # One: flux's route list lives in Caddy's own config, so two replicas would
+  # each hold their own copy and a PATCH would land on one of them. Sharing it
+  # is a Caddy clustering problem, not flux's.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "flux.selector" . | nindent 6 }}
+      app.kubernetes.io/component: caddy
+  template:
+    metadata:
+      labels:
+        {{- include "flux.selector" . | nindent 8 }}
+        app.kubernetes.io/component: caddy
+      annotations:
+        # Computed from what actually feeds the config, not from the file:
+        # including this template in its own checksum recurses forever.
+        flux.caddy/checksum: {{ .Values.router.serverName | sha256sum }}
+    spec:
+      containers:
+        - name: caddy
+          image: caddy:2.10-alpine
+          args: ["caddy", "run", "--config", "/etc/caddy/caddy.json"]
+          ports:
+            - name: admin
+              containerPort: 2019
+            - name: proxy
+              containerPort: 8090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/caddy
+              readOnly: true
+          # Admin API answering is what flux needs; serving traffic follows
+          # from the routes flux writes, so probing the proxy port before any
+          # canary has run would report a healthy Caddy as broken.
+          readinessProbe:
+            httpGet: { path: /config/, port: admin }
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-caddy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: caddy
+  labels:
+    {{- include "flux.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "flux.selector" . | nindent 4 }}
+    app.kubernetes.io/component: caddy
+  ports:
+    - name: admin
+      port: 2019
+      targetPort: admin
+    - name: proxy
+      port: 8090
+      targetPort: proxy
+{{- end }}

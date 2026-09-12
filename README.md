@@ -19,7 +19,7 @@ in the first window, so only 10% of traffic ever saw it:
 ![The same canary refusing a bad version and restoring the previous one](docs/demo-rollback.gif)
 
 Both are real recordings against a running stack, reading real Prometheus
-metrics — `api` is genuinely healthy, `checkout` genuinely is not.
+metrics. `api` is genuinely healthy and `checkout` genuinely is not.
 
 ## How a deployment runs
 
@@ -106,7 +106,7 @@ Choices that go past plumbing:
   the reason to reach for a graph library rather than hand-roll the sort. Failure
   is a policy too: `abort-dependents` stops only what transitively depends on the
   service that broke, lets independent branches finish, and reports the blocked
-  ones `Skipped` rather than failed — no child ever ran for them.
+  ones `Skipped` rather than failed, because no child ever ran for them.
 - The rollout shape is a strategy the workflow is polymorphic over. Canary shifts
   traffic in steps; blue/green flips 100% at once after a health check and bakes,
   rolling back with a single shift because the old version was never scaled down.
@@ -180,6 +180,22 @@ A pnpm + Turborepo monorepo.
 | `apps/control-plane` | HTTP API, websocket watch, SQLite read model |
 | `apps/cli` | `flux` — deploy, deploy-multi, drift, status, stats, approve, abort, history |
 
+## Kubernetes
+
+flux does not require Kubernetes and does not use its primitives to shift
+traffic. It can also be deployed *onto* Kubernetes with the chart in
+[`deploy/kubernetes`](deploy/kubernetes), which exists as a laboratory rather
+than as a distribution: the question it answers is how a durable deployment
+system behaves when the orchestrator running it can evict its processes.
+
+A canary runs entirely in-cluster there, and the one experiment worth a cluster
+is `eviction-check.mjs`: delete the worker pod mid-monitor and the canary still
+completes. The recovery is not the heartbeat timeout the SIGKILL test provokes:
+a draining worker hands its activity task back to the queue and it is
+redelivered, with no failure recorded, which is faster.
+
+flux needs no RBAC rules to do any of it: it never touches the Kubernetes API.
+
 ## Running it
 
 Node ≥ 22, pnpm 11. The backing services run in Docker:
@@ -211,7 +227,7 @@ Three tiers, because a learning project is only worth as much as what holds up.
 plane's client, trigger through outcome. Multi-service fail-fast. The cancellable
 monitor. `continueAsNew`. The Caddy router adapter drives a **real Caddy** over its
 admin API, including a fetch through the proxy to check the config it wrote is one
-Caddy serves and not just one it stores. And, with the real adapters pointed at local HTTP
+Caddy serves rather than only one it stores. And, with the real adapters pointed at local HTTP
 doubles, a full canary to `Succeeded` that checks the side effects actually
 happened: the health endpoint got probed, the nginx config got written.
 Three captured histories — a promotion, a rollback, and a dependency-ordered

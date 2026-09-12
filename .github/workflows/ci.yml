@@ -22,6 +22,18 @@ jobs:
 
       - run: pnpm turbo run typecheck test
 
+      # The chart, without a cluster. `helm template` against every values file
+      # catches the things that actually break it — a mistrimmed `-}}` gluing
+      # two keys together, a self-including checksum annotation recursing — and
+      # costs seconds. Whether it *runs* is the `kubernetes` job's question.
+      - name: Chart renders
+        run: |
+          helm lint deploy/kubernetes/chart
+          helm template flux deploy/kubernetes/chart > /tmp/rendered.yaml
+          helm template flux deploy/kubernetes/chart --set worker.autoscaling.enabled=false >> /tmp/rendered.yaml
+          helm template flux deploy/kubernetes/chart --set router.type=nginx >> /tmp/rendered.yaml
+          python3 -c "import sys, yaml; list(yaml.safe_load_all(open('/tmp/rendered.yaml'))); print('rendered YAML parses')"
+
 
   # The images are the only artifacts nothing else in the repo exercises, so
   # they are the only ones that can rot silently. Building them is cheap; the
@@ -49,6 +61,67 @@ jobs:
             for (const name of Object.keys(dependencies)) await import(name)
             console.log("resolved:", Object.keys(dependencies).join(", "))
           '
+
+
+  # The one thing a cluster is for: a canary surviving its worker being evicted
+  # by the orchestrator (D40). Everything else about the chart is settled by
+  # `helm template` in the fast job, so this job asserts the behaviour that has
+  # no cheaper proof.
+  #
+  # k3d rather than kind because k3d is what this was developed and verified
+  # against locally, and it ships metrics-server — which the HPA needs and a
+  # bare kind cluster does not have.
+  kubernetes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @flux/cli build
+
+      - run: |
+          docker build -f apps/worker/Dockerfile -t flux-worker:dev .
+          docker build -f apps/control-plane/Dockerfile -t flux-control-plane:dev .
+
+      # k3d from its own installer rather than a third-party action: the
+      # obvious one has not been touched since 2023, and these are the exact
+      # commands this was verified with locally. `helm` and `kubectl` come with
+      # the runner image.
+      - name: k3d cluster
+        run: |
+          curl -sfL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+          k3d version
+          k3d cluster create flux-lab --wait --timeout 300s
+          kubectl get nodes
+
+      - run: k3d image import flux-worker:dev flux-control-plane:dev -c flux-lab
+
+      - name: Lab dependencies
+        run: |
+          kubectl apply -f deploy/kubernetes/deps/
+          kubectl wait --for=condition=available --timeout=300s deployment/postgresql deployment/temporal deployment/prometheus deployment/demo-target deployment/demo-metrics
+          kubectl wait --for=condition=complete --timeout=300s job/temporal-namespace
+
+      - run: helm install flux deploy/kubernetes/chart --wait --timeout 300s
+
+      - name: A canary survives its worker being evicted
+        run: node deploy/kubernetes/eviction-check.mjs
+
+      - name: Cluster state on failure
+        if: failure()
+        run: |
+          kubectl get pods -o wide
+          kubectl describe pods -l app.kubernetes.io/name=flux | tail -60
+          kubectl logs -l app.kubernetes.io/component=worker --tail=60 || true
+          kubectl logs -l app.kubernetes.io/component=control-plane --tail=60 || true
 
   # Real-cluster proofs: worker versioning, resource tuner, Schedules —
   # the capabilities the time-skipping test server does not implement. Runs the

@@ -1,0 +1,50 @@
+{{- /*
+The same `flux.config.toml` the repo runs locally, rendered from values and
+mounted at FLUX_CONFIG. flux's own ConfigProvider reads the TOML as the base
+and lets environment variables override it, so the split here is not arbitrary:
+non-secret settings go in the ConfigMap, secrets go in the Secret as env, and
+the override direction does the rest.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    {{- include "flux.labels" . | nindent 4 }}
+data:
+  flux.config.toml: |
+    [temporal]
+    address = "{{ .Values.temporal.address }}"
+    namespace = "{{ .Values.temporal.namespace }}"
+    task_queue = "flux-deployments"
+
+    [metrics]
+    type = "{{ .Values.metrics.type }}"
+    prometheus_url = "{{ .Values.metrics.prometheusUrl }}"
+
+    [thresholds]
+    max_error_rate = {{ .Values.thresholds.maxErrorRate }}
+    max_p99_latency_ms = {{ .Values.thresholds.maxP99LatencyMs }}
+
+    [router]
+    type = "{{ .Values.router.type }}"
+    admin_url = "{{ .Values.router.adminUrl }}"
+    server_name = "{{ .Values.router.serverName }}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-secrets
+  labels:
+    {{- include "flux.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{- /*
+  Present but empty by default. flux treats each of these as optional and
+  degrades instead of failing: no Anthropic key means the rollback postmortem
+  is skipped, no token means the control plane's bearer auth is off.
+  */}}
+  AI_ANTHROPIC_API_KEY: {{ .Values.secrets.anthropicApiKey | quote }}
+  NOTIFICATIONS_SLACK_WEBHOOK: {{ .Values.secrets.slackWebhook | quote }}
+  CHANGELOG_GITHUB_TOKEN: {{ .Values.secrets.githubToken | quote }}
+  API_TOKEN: {{ .Values.secrets.apiToken | quote }}

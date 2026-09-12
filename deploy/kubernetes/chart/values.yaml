@@ -1,0 +1,90 @@
+# flux on Kubernetes. A laboratory rather than a distribution (D40).
+#
+# The point is to watch a durable deployment system behave when the orchestrator
+# underneath it can evict its processes. Nothing here changes how flux shifts
+# traffic: it still drives Caddy itself.
+
+image:
+  worker:
+    repository: flux-worker
+    tag: dev
+    pullPolicy: IfNotPresent
+  controlPlane:
+    repository: flux-control-plane
+    tag: dev
+    pullPolicy: IfNotPresent
+
+temporal:
+  address: temporal:7233
+  namespace: default
+
+controlPlane:
+  # Not configurable, and that is the finding rather than an omission (D40):
+  # admission control is an in-memory STM budget and the read model is a local
+  # SQLite file, so a second replica means a second budget, a second projection
+  # and a second poller querying every running workflow. One replica.
+  service:
+    port: 8080
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { memory: 512Mi }
+
+worker:
+  replicas: 2
+  # The knob the whole tier exists to study. Longer than an in-flight activity
+  # and the worker drains and finishes it; shorter and Kubernetes SIGKILLs it,
+  # the server notices the missed heartbeats, and another worker resumes. That is
+  # D27's proof, triggered by the infrastructure instead of by hand.
+  terminationGracePeriodSeconds: 30
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { memory: 768Mi }
+  podDisruptionBudget:
+    enabled: true
+    # A voluntary eviction during a canary is the interesting case, so keep one
+    # worker up through a node drain rather than letting both go at once.
+    minAvailable: 1
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    # CPU because it needs nothing extra installed. The metric that would
+    # actually fit is the task-queue backlog flux already reads over gRPC
+    # (D34), but that is three steps away, not one: the worker does not
+    # publish it as a gauge yet, Prometheus would then have to scrape it, and
+    # an HPA can only read it through a custom-metrics adapter. Set
+    # `metrics` below to drive it from something else once those exist.
+    targetCPUUtilizationPercentage: 70
+    metrics: []
+
+# flux drives the router itself. Caddy rather than nginx, and not by taste:
+# the nginx adapter writes a config file and signals a process, so it assumes
+# the worker and nginx share a filesystem and a process namespace. Caddy's
+# admin API crosses pods, so it is a Deployment and a Service (D40, D44).
+router:
+  type: caddy
+  adminUrl: http://caddy:2019
+  serverName: flux
+  # No backend port here on purpose: flux's own `backendAddress` is fixed at
+  # `<service>-<version>:8080`, so it is the lab's Services that have to match
+  # it. A value here would only be able to lie about it.
+
+metrics:
+  type: prometheus
+  prometheusUrl: http://prometheus:9090
+
+thresholds:
+  maxErrorRate: 0.01
+  maxP99LatencyMs: 500
+
+# Health probing for the canary's target, not for flux's own pods.
+health:
+  url: http://demo-target:80/health
+
+# Empty by default: flux degrades rather than failing when these are absent
+# (no key means no postmortem call, and no token means auth is off).
+secrets:
+  anthropicApiKey: ""
+  slackWebhook: ""
+  githubToken: ""
+  apiToken: ""

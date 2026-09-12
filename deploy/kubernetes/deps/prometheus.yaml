@@ -1,0 +1,60 @@
+# Prometheus for the lab. Deliberately minimal: it scrapes the demo exporter,
+# which is what a canary's threshold rules query. Scraping flux's own pods would
+# need service discovery and buys nothing for the question this tier asks.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+    scrape_configs:
+      - job_name: demo-metrics
+        static_configs:
+          - targets: ["demo-metrics:9101"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+spec:
+  selector: { app: prometheus }
+  ports: [{ port: 9090 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-metrics
+spec:
+  selector: { app: demo-metrics }
+  ports: [{ port: 9101 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: prometheus }
+  template:
+    metadata:
+      labels: { app: prometheus }
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.5.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+          ports: [{ containerPort: 9090 }]
+          readinessProbe:
+            httpGet: { path: /-/ready, port: 9090 }
+            periodSeconds: 5
+            failureThreshold: 30
+          volumeMounts:
+            - { name: config, mountPath: /etc/prometheus, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: prometheus }

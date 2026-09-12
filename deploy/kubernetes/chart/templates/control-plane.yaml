@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  labels:
+    {{- include "flux.labels" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+spec:
+  # One. Not a value, because a second replica would not scale this component,
+  # it would break it: the admission budget is a `TxSemaphore` in process
+  # memory, the read model is a SQLite file on local disk, and each replica
+  # runs its own poller querying every running workflow (D40, D41).
+  replicas: 1
+  strategy:
+    # Two control planes must not overlap even briefly, for the same reason.
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "flux.selector" . | nindent 6 }}
+      app.kubernetes.io/component: control-plane
+  template:
+    metadata:
+      labels:
+        {{- include "flux.selector" . | nindent 8 }}
+        app.kubernetes.io/component: control-plane
+      annotations:
+        # Roll the pod when the rendered config changes, which a ConfigMap
+        # mount alone would not do.
+        flux.config/checksum: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: control-plane
+          image: "{{ .Values.image.controlPlane.repository }}:{{ .Values.image.controlPlane.tag }}"
+          imagePullPolicy: {{ .Values.image.controlPlane.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: FLUX_CONFIG
+              value: /etc/flux/flux.config.toml
+            - name: TEMPORAL_ADDRESS
+              value: {{ .Values.temporal.address | quote }}
+            - name: TEMPORAL_NAMESPACE
+              value: {{ .Values.temporal.namespace | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ .Release.Name }}-secrets
+          volumeMounts:
+            - name: config
+              mountPath: /etc/flux
+              readOnly: true
+            - name: read-model
+              mountPath: /srv/data
+          # Liveness ignores Temporal on purpose: a restart cannot fix a
+          # Temporal outage, and it would discard the admission state of
+          # deployments still running. Readiness does depend on it, so an
+          # outage takes this pod out of the Service and puts it back when the
+          # cluster returns, with no restart and nothing lost (D45).
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 10
+            failureThreshold: 2
+          resources:
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-config
+        - name: read-model
+          # Deliberately ephemeral: the read model is a projection the poller
+          # rebuilds from Temporal, so losing it costs a re-projection, not
+          # data. A PVC would imply it is a source of truth.
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  labels:
+    {{- include "flux.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "flux.selector" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+  ports:
+    - name: http
+      port: {{ .Values.controlPlane.service.port }}
+      targetPort: http
