@@ -1,6 +1,7 @@
 import { Config, Effect, Layer } from "effect"
+import { Otlp } from "effect/unstable/observability"
 import { SqliteClient } from "@effect/sql-sqlite-node"
-import { NodeRuntime } from "@effect/platform-node"
+import { NodeHttpClient, NodeRuntime } from "@effect/platform-node"
 import * as Admission from "./admission.ts"
 import * as DeploymentEvents from "./deployment-events.ts"
 import * as Auth from "./http/auth.ts"
@@ -28,6 +29,23 @@ const config = Config.all({
   apiToken: Config.Redacted("API_TOKEN").pipe(Config.option)
 })
 
+/**
+ * Export spans via OTLP, same shape as the worker's.
+ *
+ * This is what closes D24's last open hop, and it is a tracer rather than any
+ * propagation code because Effect v4 already propagates: the server's
+ * `HttpMiddleware.tracer` parents each request span from the incoming
+ * `traceparent`, but it short-circuits when the installed tracer is the native
+ * one, on the grounds that its spans are unobservable anyway. No tracer here
+ * therefore meant no server span, and so nothing for the Temporal client's
+ * `withClientTraceContext` to pick up and carry into the workflow. With the
+ * tracer in place the chain runs unbroken from `flux deploy` to every activity.
+ */
+const TracingLayer = Otlp.layerJson({
+  baseUrl: process.env.OTLP_ENDPOINT ?? "http://localhost:4318",
+  resource: { serviceName: "flux-control-plane" }
+}).pipe(Layer.provide(NodeHttpClient.layerUndici))
+
 const MainLive = Layer.unwrap(
   Effect.map(config, (cfg) => {
     // The poller releases a deployment's admission slot when it finishes.
@@ -53,7 +71,8 @@ const MainLive = Layer.unwrap(
       Layer.provide(ReadModel.layer({ projectionInterval: cfg.projectionIntervalMs, maxProjected: cfg.maxTracked })),
       Layer.provide(SqliteClient.layer({ filename: cfg.readModelDb })),
       Layer.provide(Admission.layer(cfg.maxConcurrent)),
-      Layer.provide(TemporalClient.layer({ address: cfg.temporalAddress, namespace: cfg.temporalNamespace }))
+      Layer.provide(TemporalClient.layer({ address: cfg.temporalAddress, namespace: cfg.temporalNamespace })),
+      Layer.provide(TracingLayer)
     )
   })
 )

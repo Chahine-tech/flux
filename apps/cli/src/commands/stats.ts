@@ -1,6 +1,7 @@
 import { Console, Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { clientLayer, makeClient } from "../control-plane.ts"
+import { tracedCommand } from "../tracing.ts"
 
 /**
  * `flux stats` — per-service aggregates from the control plane's CQRS read
@@ -28,4 +29,4 @@ export const stats = Command.make("stats", {
           `${s.aborted} aborted, ${s.failed} failed (rollback rate ${rate}, mean ${mean})`
       )
     }
-  }).pipe(Effect.provide(clientLayer)))
+  }).pipe(Effect.provide(clientLayer), tracedCommand("stats")))

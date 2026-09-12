@@ -4,6 +4,7 @@ import { Command, Flag } from "effect/unstable/cli"
 import { TriggerMultiRequest } from "@flux/contracts"
 import { readFileSync } from "node:fs"
 import { clientLayer, makeClient } from "../control-plane.ts"
+import { tracedCommand } from "../tracing.ts"
 
 /**
  * `flux deploy-multi` — roll one version out across several services at once
@@ -65,4 +66,4 @@ export const deployMulti = Command.make("deploy-multi", {
       `[flux] started multi-service rollout ${workflowId} — ${request.services.length} services` +
         ` (max ${request.maxConcurrency} at once, fail-fast ${request.failFast})`
     )
-  }).pipe(Effect.provide(clientLayer)))
+  }).pipe(Effect.provide(clientLayer), tracedCommand("deploy-multi")))

@@ -5,6 +5,7 @@ import type { TriggerDeploymentRequest } from "@flux/contracts"
 import { DeploymentConfig } from "@flux/domain"
 import { configToInput } from "@flux/orchestration"
 import { clientLayer, makeClient } from "../control-plane.ts"
+import { tracedCommand } from "../tracing.ts"
 
 /**
  * `flux deploy` — start a canary deployment.
@@ -85,5 +86,6 @@ export const deploy = Command.make("deploy", {
     Effect.catchTag("ServiceAlreadyDeploying", (error) =>
       Console.error(`[flux] rejected: ${error.service} already has a deployment in flight`)),
     Effect.catchTag("OutsideDeploymentWindow", (error) =>
-      Console.error(`[flux] rejected: outside deploy window "${error.window}" — next opens ${error.nextAllowed}`))
+      Console.error(`[flux] rejected: outside deploy window "${error.window}" — next opens ${error.nextAllowed}`)),
+    tracedCommand("deploy")
   ))

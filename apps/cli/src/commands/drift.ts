@@ -2,6 +2,7 @@ import { Console, Duration, Effect, Option, Schema } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 import { DurationFromShorthand } from "@flux/domain"
 import { clientLayer, makeClient } from "../control-plane.ts"
+import { tracedCommand } from "../tracing.ts"
 
 /**
  * `flux drift` — turn drift detection on (or off, with `--off`) for a service
@@ -43,4 +44,4 @@ export const drift = Command.make("drift", {
       payload: { service: config.service, version, everyMs: Duration.toMillis(every) }
     })
     yield* Console.log(`[flux] drift detection on for ${config.service}@${version} — schedule ${scheduleId}`)
-  }).pipe(Effect.provide(clientLayer)))
+  }).pipe(Effect.provide(clientLayer), tracedCommand("drift")))
