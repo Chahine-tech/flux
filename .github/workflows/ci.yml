@@ -34,6 +34,31 @@ jobs:
           helm template flux deploy/kubernetes/chart --set router.type=nginx >> /tmp/rendered.yaml
           python3 -c "import sys, yaml; list(yaml.safe_load_all(open('/tmp/rendered.yaml'))); print('rendered YAML parses')"
 
+      # Built once, here, and handed to every job that needs it. The images
+      # assemble a build rather than producing one, so three jobs were each
+      # running the same `pnpm install` and the same tsdown pass to produce
+      # byte-identical output. This is also the right gate: a build that fails
+      # its own typecheck and tests should never reach a cluster.
+      - name: Build what the images assemble
+        run: |
+          pnpm --filter @flux/worker build
+          pnpm --filter @flux/worker bundle-workflows
+          pnpm --filter @flux/worker runtime-manifest
+          pnpm --filter @flux/control-plane build
+          pnpm --filter @flux/control-plane runtime-manifest
+
+      # Two paths whose least common ancestor is `apps/`, so the artifact holds
+      # `worker/dist` and `control-plane/dist` and consumers unpack it into
+      # `apps/`. The consumers assert that rather than trust it.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-dist
+          path: |
+            apps/worker/dist
+            apps/control-plane/dist
+          retention-days: 1
+          if-no-files-found: error
+
 
   # The images are the only artifacts nothing else in the repo exercises, so
   # they are the only ones that can rot silently. Building them is cheap; the
@@ -43,6 +68,7 @@ jobs:
   # more than `neverBundle`), and a base image whose libc cannot dlopen
   # Temporal's prebuilt core-bridge.
   images:
+    needs: check
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -51,24 +77,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # This job used to need nothing but Docker, because the Dockerfile did its
-      # own install. Now that the image only assembles, the toolchain has to be
-      # here instead.
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      # No Node and no pnpm here, which is the point: the image assembles a
+      # build it is handed. A version of this job installed the workspace to
+      # produce that build itself and failed with `pnpm: command not found`,
+      # having been given the work without the toolchain.
+      - uses: actions/download-artifact@v4
         with:
-          node-version: 24
-          cache: pnpm
+          name: app-dist
+          path: apps
 
-      - run: pnpm install --frozen-lockfile
-
-      # Same order as the kubernetes job: the images assemble, they do not build.
-      - name: Build the artifacts the image assembles
+      - name: The build landed where the Dockerfile looks
         run: |
-          pnpm --filter @flux/${{ matrix.app }} build
-          if [ "${{ matrix.app }}" = "worker" ]; then pnpm --filter @flux/worker bundle-workflows; fi
-          pnpm --filter @flux/${{ matrix.app }} runtime-manifest
+          for f in apps/${{ matrix.app }}/dist/main.mjs apps/${{ matrix.app }}/dist/runtime-package.json; do
+            if [ ! -f "$f" ]; then
+              echo "::error::$f is missing, so the artifact did not unpack where expected"
+              find apps -maxdepth 3 -name dist -type d
+              exit 1
+            fi
+          done
+          ls -l apps/${{ matrix.app }}/dist
 
       - run: docker build -f apps/${{ matrix.app }}/Dockerfile -t flux-${{ matrix.app }}:ci .
 
@@ -91,6 +118,7 @@ jobs:
   # against locally, and it ships metrics-server, which the HPA needs and a
   # bare kind cluster does not have.
   kubernetes:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -102,19 +130,26 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      # This job installs the workspace where `images` does not, because the
+      # eviction proof is a vitest test and needs a runnable workspace. The
+      # build itself still comes from `check`.
       - run: pnpm install --frozen-lockfile
 
-      # The images assemble a build made here rather than building inside
-      # themselves. An earlier version ran `pnpm install` in the Dockerfile and
-      # died on an npm download; it was also reinstalling what this job had
-      # just installed.
-      - name: Build the artifacts the images assemble
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-dist
+          path: apps
+
+      - name: The build landed where the Dockerfiles look
         run: |
-          pnpm --filter @flux/worker build
-          pnpm --filter @flux/worker bundle-workflows
-          pnpm --filter @flux/worker runtime-manifest
-          pnpm --filter @flux/control-plane build
-          pnpm --filter @flux/control-plane runtime-manifest
+          for f in apps/worker/dist/main.mjs apps/worker/dist/workflow-bundle.js \
+                   apps/control-plane/dist/main.mjs; do
+            if [ ! -f "$f" ]; then
+              echo "::error::$f is missing, so the artifact did not unpack where expected"
+              find apps -maxdepth 3 -name dist -type d
+              exit 1
+            fi
+          done
 
       - run: |
           docker build -f apps/worker/Dockerfile -t flux-worker:dev .
@@ -143,10 +178,53 @@ jobs:
 
       # The plumbing is the job's, the assertion is the test's, same split as
       # the compose tier.
+      #
+      # All in one step, and supervised. The chart gives the control plane a
+      # ClusterIP, so a port-forward is the only way in, and an unsupervised
+      # `&` that never came up or died mid-run would show up as unexplained
+      # fetch failures inside the test rather than as the infrastructure
+      # problem it is. Actions grew a native `background:` step marker for this
+      # in June 2026, but it is not in the workflow syntax reference yet and an
+      # unknown step key fails validation for the whole file, so this stays
+      # shell until it is documented.
       - name: A canary survives its worker being evicted
         run: |
-          kubectl port-forward svc/flux-control-plane 18080:8080 &
-          FLUX_K8S=1 pnpm --filter @flux/worker test
+          # `set -m` so the supervisor becomes its own process group leader and
+          # the trap can take the whole group down. Killing just the subshell
+          # leaves the `kubectl` it spawned orphaned and still holding the port.
+          set -m
+          ( while true; do
+              # `|| true` is load-bearing: Actions runs `bash -e`, the subshell
+              # inherits it, and without this the supervisor dies the first
+              # time the forward exits nonzero, which is the one case it is
+              # here for.
+              kubectl port-forward svc/flux-control-plane 18080:8080 >/dev/null 2>&1 || true
+              sleep 1
+            done ) &
+          forward=$!
+          set +m
+          trap 'kill -- -"$forward" 2>/dev/null || true' EXIT
+
+          # `/health/live`, not `/health/ready`, and the difference is D45's
+          # whole point: this is asking whether the network path works.
+          # Readiness is the test's own precondition and the test polls for it.
+          for i in $(seq 1 60); do
+            if curl -sf --max-time 5 http://localhost:18080/health/live >/dev/null; then
+              echo "control plane reachable after ${i}s"
+              reachable=1
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "${reachable:-}" ]; then
+            echo "::error::nothing answered on localhost:18080 after 60s, the port-forward never came up"
+            kubectl get svc,pods -o wide
+            exit 1
+          fi
+
+          # Named so only the cluster test runs: `check` already ran the rest,
+          # and their output here would only bury the one result that matters.
+          FLUX_K8S=1 pnpm --filter @flux/worker test kubernetes
 
       - name: Cluster state on failure
         if: failure()
