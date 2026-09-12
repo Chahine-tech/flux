@@ -1,8 +1,10 @@
 import { describe, it } from "@effect/vitest"
+import type { Duration } from "effect"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { DeploymentState } from "@flux/contracts"
 import { expect } from "vitest"
+import * as Admission from "../src/admission.ts"
 import { DeploymentEvents, keepMonotonic, layer } from "../src/deployment-events.ts"
 import { TemporalClient } from "../src/temporal-client.ts"
 
@@ -37,7 +39,8 @@ const makeSetup = () => {
     abort: () => Effect.void,
     ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
     disableDrift: () => Effect.void,
-    reachable: Effect.succeed(true)
+    reachable: Effect.succeed(true),
+    execution: () => Effect.succeed("closed" as const)
   })
   const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
   return { EventsLive, setState: (next: DeploymentState) => (current = next) }
@@ -117,7 +120,8 @@ describe("deployment events poller", () => {
       abort: () => Effect.void,
       ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
       disableDrift: () => Effect.void,
-    reachable: Effect.succeed(true)
+    reachable: Effect.succeed(true),
+    execution: () => Effect.succeed("closed" as const)
     })
     const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
 
@@ -154,7 +158,8 @@ describe("deployment events poller", () => {
       abort: () => Effect.void,
       ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
       disableDrift: () => Effect.void,
-    reachable: Effect.succeed(true)
+    reachable: Effect.succeed(true),
+    execution: () => Effect.succeed("closed" as const)
     })
     const EventsLive = layer({
       pollInterval: "5 seconds",
@@ -188,7 +193,8 @@ describe("deployment events poller", () => {
       abort: () => Effect.void,
       ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
       disableDrift: () => Effect.void,
-    reachable: Effect.succeed(true)
+    reachable: Effect.succeed(true),
+    execution: () => Effect.succeed("closed" as const)
     })
     const EventsLive = layer({
       pollInterval: "5 seconds",
@@ -231,7 +237,8 @@ describe("deployment events poller", () => {
       abort: () => Effect.void,
       ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
       disableDrift: () => Effect.void,
-    reachable: Effect.succeed(true)
+    reachable: Effect.succeed(true),
+    execution: () => Effect.succeed("closed" as const)
     })
     const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
 
@@ -250,6 +257,231 @@ describe("deployment events poller", () => {
 
       const collected = yield* Fiber.join(collector)
       expect(collected.at(-1)?.outcome).toBe("Succeeded")
+    }).pipe(Effect.provide(EventsLive))
+  })
+})
+
+/**
+ * Admission slots, and the leak that made them permanent.
+ *
+ * Found on a live cluster rather than by reading: a service stayed rejected
+ * with `ServiceAlreadyDeploying` until the control plane restarted. The poller
+ * released only what it had *seen running*, so a deployment it never saw kept
+ * its slot for the life of the process. The two ways in are the first two
+ * tests; the rest guard the fix against being worse than the bug, since
+ * anything that frees a slot too eagerly breaks the invariant admission
+ * control exists for.
+ *
+ * `status` throws rather than failing where a broken tick is simulated, and
+ * that is not artificial: `temporal-client.ts` declares `status` as
+ * `Effect<_, DeploymentNotFound>` but its `catch: classifyNotFound` re-throws
+ * anything that is not a `WorkflowNotFoundError`, and a throw inside
+ * `tryPromise`'s `catch` is a defect. Defects pass straight through the
+ * `Effect.option` the poller wraps `status` in, so one unreadable deployment
+ * kills the whole tick and loses every sighting in it.
+ */
+const admissionSetup = (options?: { readonly unownedGrace?: Duration.Input }) => {
+  let running: Array<string> = []
+  let throwOnStatus = false
+  const executions = new Map<string, "open" | "closed" | "missing" | "unknown">()
+
+  const FakeTemporal = Layer.succeed(TemporalClient, {
+    start: () => Effect.succeed("wf1"),
+    startMulti: () => Effect.succeed("multi"),
+    status: () =>
+      Effect.sync(() => {
+        if (throwOnStatus) throw new Error("9 FAILED_PRECONDITION: no poller seen for task queue recently")
+        return state(10)
+      }),
+    list: () => Effect.succeed([]),
+    listRunningIds: () => Effect.sync(() => running),
+    listClosed: () => Effect.succeed([]),
+    approve: () => Effect.void,
+    abort: () => Effect.void,
+    ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
+    disableDrift: () => Effect.void,
+    reachable: Effect.succeed(true),
+    execution: (workflowId) => Effect.succeed(executions.get(workflowId) ?? "missing")
+  })
+
+  // The real admission controller, not a spy: the assertion is about whether a
+  // service can deploy again, which is the thing the bug broke.
+  const AdmissionLive = Admission.layer(10)
+  // Same shape as `main.ts`'s composition root, so the wiring under test is
+  // the wiring that ships.
+  const EventsLive = Layer.unwrap(
+    Effect.gen(function*() {
+      const admission = yield* Admission.AdmissionController
+      return layer({
+        pollInterval: "5 seconds",
+        maxTracked: 100,
+        onDeploymentEnded: (service) => admission.release(service),
+        onDeploymentSeen: (service) => Effect.ignore(admission.admit(service)),
+        slots: admission.slots,
+        ...(options?.unownedGrace === undefined ? {} : { unownedGrace: options.unownedGrace })
+      })
+    })
+  ).pipe(Layer.provide(FakeTemporal))
+
+  return {
+    Live: Layer.provideMerge(EventsLive, AdmissionLive),
+    setRunning: (ids: Array<string>) => (running = ids),
+    breakStatus: (broken: boolean) => (throwOnStatus = broken),
+    setExecution: (workflowId: string, value: "open" | "closed" | "missing" | "unknown") =>
+      executions.set(workflowId, value)
+  }
+}
+
+/** Can this service be admitted again? The only question that matters. */
+const canDeployAgain = (service: string) =>
+  Effect.gen(function*() {
+    const admission = yield* Admission.AdmissionController
+    const result = yield* Effect.result(admission.admit(service))
+    if (result._tag === "Success") yield* admission.release(service)
+    return result._tag === "Success"
+  })
+
+describe("admission slots", () => {
+  it.effect("frees the slot of a deployment shorter than one poll interval", () => {
+    const h = admissionSetup()
+    return Effect.gen(function*() {
+      const admission = yield* Admission.AdmissionController
+      // What the HTTP handler does: reserve, start, bind.
+      yield* admission.admit("api")
+      yield* admission.bind(["api"], "wf1")
+      // The workflow came and went without the poller ever listing it.
+      h.setExecution("wf1", "closed")
+
+      yield* TestClock.adjust("6 seconds")
+      expect(yield* canDeployAgain("api")).toBe(true)
+    }).pipe(Effect.provide(h.Live))
+  })
+
+  it.effect("frees the slot of a deployment whose only sighting died with its tick", () => {
+    const h = admissionSetup()
+    return Effect.gen(function*() {
+      const admission = yield* Admission.AdmissionController
+      yield* admission.admit("api")
+      yield* admission.bind(["api"], "wf1")
+
+      // Its one appearance in the running set lands in a tick that throws.
+      h.breakStatus(true)
+      h.setRunning(["wf1"])
+      yield* TestClock.adjust("6 seconds")
+
+      // It ends and Temporal recovers.
+      h.setRunning([])
+      h.setExecution("wf1", "closed")
+      h.breakStatus(false)
+      yield* TestClock.adjust("6 seconds")
+
+      expect(yield* canDeployAgain("api")).toBe(true)
+    }).pipe(Effect.provide(h.Live))
+  })
+
+  it.effect("keeps the slots of a rollout whose children have not started yet", () => {
+    const h = admissionSetup()
+    return Effect.gen(function*() {
+      const admission = yield* Admission.AdmissionController
+      // `admitAll` reserves every service up front, all or nothing, and the
+      // parent owns all of them. Its children start in waves, so `web` has no
+      // running deployment of its own for as long as earlier waves take.
+      yield* admission.admitAll(["api", "web", "worker"])
+      yield* admission.bind(["api", "web", "worker"], "multi-1")
+      h.setExecution("multi-1", "open")
+      h.setRunning([])
+
+      yield* TestClock.adjust("6 seconds")
+      yield* TestClock.adjust("6 seconds")
+      yield* TestClock.adjust("6 seconds")
+
+      // Freeing these would let a second rollout in and defeat the reservation.
+      expect(yield* canDeployAgain("web")).toBe(false)
+      expect(yield* canDeployAgain("worker")).toBe(false)
+    }).pipe(Effect.provide(h.Live))
+  })
+
+  it.effect("frees every slot of a rollout once its parent is gone", () => {
+    const h = admissionSetup()
+    return Effect.gen(function*() {
+      const admission = yield* Admission.AdmissionController
+      yield* admission.admitAll(["api", "web"])
+      yield* admission.bind(["api", "web"], "multi-1")
+      h.setExecution("multi-1", "closed")
+
+      yield* TestClock.adjust("6 seconds")
+      expect(yield* canDeployAgain("api")).toBe(true)
+      expect(yield* canDeployAgain("web")).toBe(true)
+    }).pipe(Effect.provide(h.Live))
+  })
+
+  it.effect("leaves a slot alone while Temporal cannot answer for it", () => {
+    const h = admissionSetup()
+    return Effect.gen(function*() {
+      const admission = yield* Admission.AdmissionController
+      yield* admission.admit("api")
+      yield* admission.bind(["api"], "wf1")
+      // A transient failure is not evidence the deployment ended. Treating it
+      // as one would free the slot of a deployment that is still running.
+      h.setExecution("wf1", "unknown")
+
+      yield* TestClock.adjust("6 seconds")
+      yield* TestClock.adjust("6 seconds")
+      expect(yield* canDeployAgain("api")).toBe(false)
+    }).pipe(Effect.provide(h.Live))
+  })
+
+  it.effect("frees an unowned slot only once it outlives the grace period", () => {
+    const h = admissionSetup({ unownedGrace: "20 seconds" })
+    return Effect.gen(function*() {
+      const admission = yield* Admission.AdmissionController
+      // Reserved, but the workflow never started, so nothing was ever bound:
+      // a `start` that died between reserving and binding.
+      yield* admission.admit("api")
+
+      yield* TestClock.adjust("6 seconds")
+      expect(yield* canDeployAgain("api"), "still inside the grace period").toBe(false)
+
+      yield* TestClock.adjust("20 seconds")
+      expect(yield* canDeployAgain("api"), "past it").toBe(true)
+    }).pipe(Effect.provide(h.Live))
+  })
+})
+
+describe("a tick survives one unreadable deployment", () => {
+  it.effect("still sees the others when one deployment's status throws", () => {
+    // Two deployments running; one is unreadable. Before `statusOrNone`, the
+    // defect aborted the tick, so `wf2` was never seen either, and neither
+    // `lastSeen` nor the release loop ran at all.
+    const seen: Array<string> = []
+    const FakeTemporal = Layer.succeed(TemporalClient, {
+      start: () => Effect.succeed("wf1"),
+      startMulti: () => Effect.succeed("multi"),
+      status: (workflowId) =>
+        Effect.sync(() => {
+          if (workflowId === "wf-bad") throw new Error("9 FAILED_PRECONDITION: no poller seen")
+          return { ...state(10), service: "healthy" }
+        }),
+      list: () => Effect.succeed([]),
+      listRunningIds: () => Effect.succeed(["wf-bad", "wf-good"]),
+      listClosed: () => Effect.succeed([]),
+      approve: () => Effect.void,
+      abort: () => Effect.void,
+      ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
+      disableDrift: () => Effect.void,
+      reachable: Effect.succeed(true),
+      execution: () => Effect.succeed("open" as const)
+    })
+    const EventsLive = layer({
+      pollInterval: "5 seconds",
+      maxTracked: 100,
+      onDeploymentSeen: (service) => Effect.sync(() => void seen.push(service))
+    }).pipe(Layer.provide(FakeTemporal))
+
+    return Effect.gen(function*() {
+      yield* DeploymentEvents
+      yield* TestClock.adjust("6 seconds")
+      expect(seen).toEqual(["healthy"])
     }).pipe(Effect.provide(EventsLive))
   })
 })

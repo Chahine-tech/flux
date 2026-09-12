@@ -60,6 +60,11 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
         const workflowId = yield* temporal.start(input).pipe(
           Effect.onError(() => admission.release(payload.service))
         )
+        // Attach the workflow to the slot it is using. Until this runs the slot
+        // has no owner, so the poller has nothing to ask Temporal about and can
+        // only free it on a timeout; after it, the slot's fate follows the
+        // workflow's and cannot be leaked by a missed transition.
+        yield* admission.bind([payload.service], workflowId)
         return { workflowId }
       }))
     .handle("triggerMulti", ({ payload }) =>
@@ -90,6 +95,12 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
           ...(rest as unknown as MultiServiceInput),
           plan: compiled.plan
         }).pipe(Effect.onError(() => admission.releaseAll(services)))
+        // Every service in the rollout is owned by the *parent*, not by a child
+        // deployment of its own. The children start in waves, so a service
+        // still waiting for its wave has no running deployment to point at, and
+        // binding it to its own future child would let reconciliation free the
+        // seat `admitAll` took in order to reserve it.
+        yield* admission.bind(services, workflowId)
         return { workflowId }
       }))
     .handle("enableDrift", ({ payload }) =>

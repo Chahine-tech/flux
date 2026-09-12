@@ -24,6 +24,21 @@ export class TemporalClient extends Context.Service<TemporalClient, {
   readonly startMulti: (input: MultiServiceInput) => Effect.Effect<string>
   readonly status: (workflowId: string) => Effect.Effect<DeploymentState, DeploymentNotFound>
   /**
+   * Whether a workflow is still open, for reconciling admission slots.
+   *
+   * `describe` rather than a visibility query, because visibility is only
+   * eventually consistent and this answer decides whether to free a slot: a
+   * lagging index would report a live rollout as gone and let a second
+   * deployment of the same service in. `describe` reads the mutable state
+   * directly, so "missing" means it really does not exist rather than "not
+   * indexed yet".
+   *
+   * Total on purpose. A caller reconciling slots has nothing useful to do with
+   * a transient failure except leave the slot alone until the next tick, which
+   * is what `Unknown` says.
+   */
+  readonly execution: (workflowId: string) => Effect.Effect<"open" | "closed" | "missing" | "unknown">
+  /**
    * Whether the cluster is reachable *and* the namespace flux works in is
    * registered — a readiness signal, not a liveness one.
    *
@@ -118,6 +133,17 @@ export const make = (client: Client): typeof TemporalClient.Service => {
         try: () => handle(workflowId).query<DeploymentState>("status"),
         catch: (error) => classifyNotFound(error, workflowId)
       }),
+
+    execution: (workflowId) =>
+      Effect.tryPromise({
+        try: async () => {
+          const description = await handle(workflowId).describe()
+          // `status.name` is the string form; RUNNING and the continued-as-new
+          // states are the ones that still hold their slot.
+          return description.status.name === "RUNNING" ? "open" as const : "closed" as const
+        },
+        catch: (error) => (error instanceof WorkflowNotFoundError ? "missing" as const : "unknown" as const)
+      }).pipe(Effect.catch(Effect.succeed)),
 
     reachable: Effect.tryPromise(async () => {
       const { namespaceInfo } = await client.connection.workflowService.describeNamespace({

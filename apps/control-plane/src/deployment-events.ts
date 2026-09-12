@@ -1,4 +1,4 @@
-import { Clock, Context, type Duration, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule, Stream } from "effect"
+import { Clock, Context, Duration, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule, Stream } from "effect"
 import type { DeploymentState } from "@flux/contracts"
 import { TemporalClient } from "./temporal-client.ts"
 
@@ -50,6 +50,20 @@ export interface DeploymentEventsConfig {
    * Defaults to a no-op so the poller stays decoupled from admission control.
    */
   readonly onDeploymentSeen?: (service: string) => Effect.Effect<void>
+  /**
+   * The admission slots to reconcile against, if any. Without this the poller
+   * is purely edge-triggered and can only release what it watched run, which
+   * leaks a slot for every deployment it never saw (see `reconcile` below).
+   */
+  readonly slots?: Effect.Effect<
+    ReadonlyArray<{ readonly service: string; readonly owner: string | undefined; readonly seatedAt: number }>
+  >
+  /**
+   * How long a slot with no owner yet may live. It covers the window between
+   * the handler reserving a slot and the workflow it started being bound to it,
+   * so it only has to outlast one `start` call.
+   */
+  readonly unownedGrace?: Duration.Input
 }
 
 /**
@@ -89,6 +103,29 @@ export const layer = (
       const onEnded = config.onDeploymentEnded ?? (() => Effect.void)
       const onSeen = config.onDeploymentSeen ?? (() => Effect.void)
 
+      /**
+       * `status` for a single deployment, with anything that goes wrong turned
+       * into `None` rather than propagated.
+       *
+       * `Effect.option` alone is not enough, and that gap is what turned one
+       * bad deployment into a dead tick. `temporal-client.ts` declares `status`
+       * as failing only with `DeploymentNotFound`, but its `catch` re-throws
+       * anything it cannot classify, and a throw inside `tryPromise`'s `catch`
+       * becomes a defect. So a transient Temporal error (a worker restarting
+       * makes the query unanswerable: `FAILED_PRECONDITION: no poller seen for
+       * task queue recently`) escaped the guard and aborted the whole tick,
+       * losing every other deployment's delta with it.
+       *
+       * `catchCause` covers failures and defects alike. The port's error type
+       * is still optimistic, which is a separate decision about the contract's
+       * error surface; this makes the poller not depend on it being right.
+       */
+      const statusOrNone = (workflowId: string) =>
+        temporal.status(workflowId).pipe(
+          Effect.map(Option.some),
+          Effect.catchCause(() => Effect.succeed(Option.none<DeploymentState>()))
+        )
+
       // One poll: publish a delta for every running deployment whose state
       // changed (or is newly seen), then release the slot of any deployment that
       // was running and has now finished.
@@ -99,7 +136,7 @@ export const layer = (
         let next = HashMap.empty<string, DeploymentState>()
 
         for (const workflowId of runningIds) {
-          const state = yield* Effect.option(temporal.status(workflowId))
+          const state = yield* statusOrNone(workflowId)
           if (Option.isNone(state)) continue
 
           const prior = HashMap.get(previous, workflowId)
@@ -124,7 +161,7 @@ export const layer = (
           if (runningSet.has(workflowId)) continue
           const last = HashMap.get(previous, workflowId)
           if (Option.isSome(last)) {
-            const final = yield* Effect.option(temporal.status(workflowId))
+            const final = yield* statusOrNone(workflowId)
             if (Option.isSome(final) && final.value.outcome !== undefined) {
               const readAt = yield* Clock.currentTimeMillis
               yield* PubSub.publish(pubsub, { workflowId, state: final.value, readAt })
@@ -134,7 +171,59 @@ export const layer = (
         }
 
         yield* Ref.set(lastSeen, next)
+
+        yield* reconcile()
       })
+
+      /**
+       * The safety net under the edge-triggered release above, and the reason
+       * it exists is a leak observed on a live cluster: a service stayed
+       * rejected with `ServiceAlreadyDeploying` until the control plane
+       * restarted. The loop before this one can only release what it has
+       * *seen running*, so any deployment it never sees keeps its slot for the
+       * life of the process. Two reproduced ways in: a deployment shorter than
+       * one poll interval, and a deployment whose only sighting fell in a tick
+       * that died.
+       *
+       * So rather than infer the end from a transition it might have missed,
+       * this asks Temporal about the workflow that owns each slot. `execution`
+       * is a `describe`, not a visibility query, because this answer frees a
+       * slot and an eventually-consistent index would report a live rollout as
+       * gone. `unknown` leaves the slot alone: a transient failure is not
+       * evidence of anything, and the next tick will ask again.
+       *
+       * A slot with no owner is one whose workflow has not started yet, so
+       * there is nothing to ask about; it is released only once it outlives the
+       * grace period, which covers a `start` call that died between reserving
+       * and binding.
+       */
+      const reconcile = () =>
+        Effect.gen(function*() {
+          const slots = config.slots
+          if (slots === undefined) return
+          const held = yield* slots
+          if (held.length === 0) return
+          const now = yield* Clock.currentTimeMillis
+          const graceMs = Duration.toMillis(config.unownedGrace ?? "30 seconds")
+
+          for (const slot of held) {
+            if (slot.owner === undefined) {
+              if (now - slot.seatedAt >= graceMs) {
+                yield* Effect.logWarning("releasing an admission slot that was never bound to a workflow").pipe(
+                  Effect.annotateLogs({ service: slot.service, ageMs: now - slot.seatedAt })
+                )
+                yield* onEnded(slot.service)
+              }
+              continue
+            }
+            const state = yield* temporal.execution(slot.owner)
+            if (state === "open" || state === "unknown") continue
+            yield* Effect.logInfo("releasing an admission slot whose workflow is gone").pipe(
+              Effect.annotateLogs({ service: slot.service, workflowId: slot.owner, execution: state })
+            )
+            yield* onEnded(slot.service)
+          }
+        })
 
       // A failing tick (e.g. a transient visibility error) must not kill the
       // loop — log the cause and keep polling on the next schedule.
@@ -151,7 +240,7 @@ export const layer = (
             // Subscribe first, then read the current state, so no delta emitted
             // between the two is lost.
             const subscription = yield* PubSub.subscribe(pubsub)
-            const current = yield* Effect.option(temporal.status(workflowId))
+            const current = yield* statusOrNone(workflowId)
             const readAt = yield* Clock.currentTimeMillis
 
             const deltas = Stream.fromSubscription(subscription).pipe(

@@ -61,7 +61,11 @@ const MainLive = Layer.unwrap(
           // admitted, which is the expected case and is ignored; it only
           // actually takes a seat after a restart, or for a deployment started
           // through another path.
-          onDeploymentSeen: (service) => Effect.ignore(admission.admit(service))
+          onDeploymentSeen: (service) => Effect.ignore(admission.admit(service)),
+          // The level-triggered half: every tick, any slot whose workflow
+          // Temporal says is gone is freed, so a missed terminal transition
+          // cannot block a service until the next restart.
+          slots: admission.slots
         })
       })
     )

@@ -18,6 +18,22 @@ test in this repo. One caveat applies throughout: the Effect modules are
 shipped source and the repo's own tests), so this compares Temporal as it is
 against Effect's engine as it is *today*.
 
+**Measured against `effect@4.0.0-beta.102` and Temporal SDK 1.21, and re-verified
+on 2026-09-11 against `4.0.0-rc.113` and SDK 1.23 / server 1.31.2.** For a
+comparison of an undocumented, unstable API, the version is part of the claim.
+The engine moved a good deal over those eleven versions — trace context now
+propagates through persisted workflow requests, parallel child workflows inside
+activities dispatch before suspending, interrupt finalization is aligned between
+the in-memory and cluster engines — but none of that touched a finding here. The
+three load-bearing ones were re-checked rather than assumed: the redelivery lease
+is still `const tenMinutesAgo`, a literal in `SqlMessageStorage` with no config
+hook; `poll` still returns a terminal result or nothing; and removing the
+`TestClock` workaround below still times the test out at five seconds. The
+Temporal side of the headline number was re-measured too: `worker-kill.test.ts`
+against server 1.31.2 still completes in 19 seconds end to end, setup and
+workflow bundling included, which bounds the recovery cycle well inside the
+original ~18s observation.
+
 ## Where the code lives
 
 | | Temporal | Effect |
@@ -104,7 +120,7 @@ reacting to bad metrics within seconds, that gap is disqualifying on its own.
 So durability holds on both sides. The operational difference is what you get
 *around* it: Temporal's history is a first-class artifact — fetchable,
 serializable to JSON, replayable in CI against future code (this repo commits
-two of them as a determinism lock), inspectable in a UI. The Effect engine's
+three of them as a determinism lock — a promotion, a rollback, and a dependency-ordered multi-service rollout), inspectable in a UI. The Effect engine's
 SQL rows are an implementation detail with no tooling around them. There is no
 equivalent of the replay lock — nothing to catch a code change that breaks
 in-flight executions.
