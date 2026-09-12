@@ -113,6 +113,27 @@ const runWithDecision = async (
 }
 
 describe("control plane e2e", () => {
+  it("stamps the service as the deployment's fairness key", async () => {
+    const temporal = make(env.client)
+    // No worker needed: the start event is recorded whether or not anything
+    // picks the workflow up, and that event is the only place the key appears.
+    const workflowId = await Effect.runPromise(temporal.start({ ...gatedRequest, service: "checkout" }))
+
+    const history = await env.client.workflow.getHandle(workflowId).fetchHistory()
+    const started = history.events?.[0]?.workflowExecutionStartedEventAttributes
+    expect(started?.priority?.fairnessKey).toBe("checkout")
+
+    // The activities carry no priority of their own: an absent field means
+    // "inherit from the calling workflow", so the key is proven where it is
+    // set, not where it is used. D35's rollback priority is the opposite case
+    // — an explicit override, which does materialise on the activity.
+    const withPriority = (history.events ?? []).filter((event) =>
+      event.activityTaskScheduledEventAttributes?.priority !== undefined &&
+      event.activityTaskScheduledEventAttributes?.priority !== null
+    )
+    expect(withPriority).toHaveLength(0)
+  })
+
   it("trigger -> status parks at gate -> approve -> Succeeded", async () => {
     const result = await runWithDecision((temporal, workflowId) => Effect.runPromise(temporal.approve(workflowId)))
     expect(result.kind).toBe("Succeeded")

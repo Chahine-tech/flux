@@ -63,6 +63,9 @@ afterAll(async () => {
   await env?.teardown()
 })
 
+/** The id of the most recent rollout, so a test can read its recorded history. */
+let lastRolloutId = ""
+
 const run = async (input: MultiServiceInput, activities: DeploymentActivities): Promise<MultiServiceResult> => {
   const worker = await Worker.create({
     connection: env.nativeConnection,
@@ -71,10 +74,11 @@ const run = async (input: MultiServiceInput, activities: DeploymentActivities): 
     workflowBundle,
     activities
   })
+  lastRolloutId = `multi-${Date.now()}-${Math.random().toString(36).slice(2)}`
   return worker.runUntil(
     env.client.workflow.execute("multiServiceDeployment", {
       taskQueue: TASK_QUEUE,
-      workflowId: `multi-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      workflowId: lastRolloutId,
       args: [input]
     })
   ) as Promise<MultiServiceResult>
@@ -193,5 +197,32 @@ describe("multiServiceDeployment", () => {
     expect(byService["cache"]!.kind).toBe("Succeeded")
     // web never started, so it is Skipped rather than Failed, and says why.
     expect(byService["web"]).toEqual({ kind: "Skipped", service: "web", blockedBy: "api" })
+  })
+
+  it("gives each child its own fairness key, so one rollout cannot own the queue", async () => {
+    await run({
+      services: [service("api", 0), service("web", 0)],
+      maxConcurrency: 2,
+      failFast: false
+    }, okActivities())
+
+    const history = await env.client.workflow.getHandle(lastRolloutId).fetchHistory()
+    const started = (history.events ?? []).flatMap((event) => {
+      const attributes = event.startChildWorkflowExecutionInitiatedEventAttributes
+      return attributes === undefined || attributes === null
+        ? []
+        : [{ workflowId: attributes.workflowId, fairnessKey: attributes.priority?.fairnessKey }]
+    })
+
+    expect(started).toHaveLength(2)
+    // Keyed by service, not by rollout: two services are two tenants on the
+    // queue, so a big rollout shares it instead of queueing ahead of an
+    // unrelated deployment.
+    const keys = started.map((entry) => entry.fairnessKey).sort()
+    expect(keys).toEqual(["api", "web"])
+    // And the key belongs to the child it was started for.
+    for (const entry of started) {
+      expect(entry.workflowId).toContain(entry.fairnessKey!)
+    }
   })
 }, 120_000)

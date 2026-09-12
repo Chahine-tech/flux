@@ -13,3 +13,11 @@ frontend.enableUpdateWorkflowExecutionAsyncAccepted:
 # routing the default, so both keys are gone. Verified rather than assumed:
 # the cross-namespace canary in apps/worker/test/nexus.test.ts passes against
 # 1.31.2 with this file exactly as it stands.
+
+# Task-queue fairness (GA in server 1.31, off by default). flux keys it by
+# service, so a twenty-service rollout shares the queue with an unrelated
+# single deployment instead of queueing ahead of it. Priority still decides who
+# goes first — D35's rollback compensation keeps its priorityKey of 1 — and
+# fairness only decides how the rest is shared.
+matching.enableFairness:
+  - value: true

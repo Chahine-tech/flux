@@ -77,6 +77,13 @@ export const make = (client: Client): typeof TemporalClient.Service => {
         await client.workflow.start(WORKFLOW_TYPE, {
           taskQueue: TASK_QUEUE,
           workflowId,
+          // Fair share of the task queue, keyed by service. Activities and
+          // child workflows inherit this, so it is set once here rather than
+          // on every proxy. D35's rollback priority overrides `priorityKey`
+          // only and keeps this key, which is the composition the SDK
+          // documents: priority decides who goes first, fairness decides how
+          // the rest of the queue is shared out.
+          priority: { fairnessKey: request.service },
           // The request is structurally the workflow's Effect-free input.
           args: [request as DeploymentInput]
         })

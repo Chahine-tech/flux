@@ -154,6 +154,12 @@ export async function multiServiceDeployment(input: MultiServiceInput): Promise<
 
       const handle = await startChild(deploymentWorkflow, {
         workflowId: `${parentId}-${service}`,
+        // Each child carries its own service's fairness key rather than
+        // inheriting the parent's. Without this a twenty-service rollout is one
+        // tenant on the queue and can crowd out an unrelated single deployment;
+        // with it, the queue is shared per service, which is the unit flux
+        // already treats as a tenant (admission allows one deployment each).
+        priority: { fairnessKey: service },
         args: [serviceInput]
       })
       inflight.set(service, handle)
