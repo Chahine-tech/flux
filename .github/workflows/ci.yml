@@ -51,13 +51,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # This job used to need nothing but Docker, because the Dockerfile did its
+      # own install. Now that the image only assembles, the toolchain has to be
+      # here instead.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
       # Same order as the kubernetes job: the images assemble, they do not build.
-      - run: |
-          pnpm install --frozen-lockfile
+      - name: Build the artifacts the image assembles
+        run: |
           pnpm --filter @flux/${{ matrix.app }} build
           if [ "${{ matrix.app }}" = "worker" ]; then pnpm --filter @flux/worker bundle-workflows; fi
           pnpm --filter @flux/${{ matrix.app }} runtime-manifest
-          docker build -f apps/${{ matrix.app }}/Dockerfile -t flux-${{ matrix.app }}:ci .
+
+      - run: docker build -f apps/${{ matrix.app }}/Dockerfile -t flux-${{ matrix.app }}:ci .
 
       - name: Runtime dependencies load inside the image
         run: |
