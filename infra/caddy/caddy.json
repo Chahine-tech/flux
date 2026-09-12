@@ -1,0 +1,15 @@
+{
+  "admin": {
+    "listen": "0.0.0.0:2019"
+  },
+  "apps": {
+    "http": {
+      "servers": {
+        "flux": {
+          "listen": [":8090"],
+          "routes": []
+        }
+      }
+    }
+  }
+}

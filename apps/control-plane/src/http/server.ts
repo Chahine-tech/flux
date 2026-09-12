@@ -7,6 +7,7 @@ import { DeploymentRpcs, FluxApi } from "@flux/contracts"
 import { createServer } from "node:http"
 import { DeploymentEvents } from "../deployment-events.ts"
 import { CodecApi, CodecHandlers } from "./codec-server.ts"
+import { HealthApi, HealthHandlers } from "./health.ts"
 import { DeploymentsHandlers, StatsHandlers } from "./handlers.ts"
 
 /**
@@ -47,7 +48,10 @@ const CorsLive = HttpRouter.cors({
   allowedHeaders: ["content-type", "x-namespace"]
 })
 
-const AppLive = Layer.mergeAll(ApiLive, DocsLive, RpcLive, CodecLive, CorsLive)
+// Probes, also outside FluxApi: a kubelet carries no bearer token.
+const HealthLive = HttpApiBuilder.layer(HealthApi).pipe(Layer.provide(HealthHandlers))
+
+const AppLive = Layer.mergeAll(ApiLive, DocsLive, RpcLive, CodecLive, HealthLive, CorsLive)
 
 export const serverLayer = (options: { readonly port: number }) =>
   HttpRouter.serve(AppLive).pipe(

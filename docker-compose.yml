@@ -134,6 +134,32 @@ services:
     profiles: ["demo"]
     ports:
       - "8088:80"
+    networks:
+      default:
+        # One container answering for several versions, so Caddy's upstreams
+        # resolve and the router adapter can be driven with a distinct dial
+        # address per version — which is what lets its `versionOf` inverse
+        # recover the version from the address it wrote.
+        aliases:
+          - api-v1
+          - api-v2
+          - api-v3
+
+  # A real Caddy for the router adapter to drive. D20 built the adapter against
+  # the admin API and proved it with an HTTP double; this is the thing itself,
+  # which matters because it is the only adapter whose shape fits a pod topology
+  # (nginx writes a file and signals a process, so it assumes co-location — D40).
+  # flux appends its own route to `apps.http.servers.flux`, so the config it
+  # starts with only has to provide an empty `routes` array.
+  caddy:
+    image: caddy:2.10-alpine
+    profiles: ["demo"]
+    command: caddy run --config /etc/caddy/caddy.json
+    ports:
+      - "2019:2019"
+      - "8090:8090"
+    volumes:
+      - ./infra/caddy/caddy.json:/etc/caddy/caddy.json:ro
 
   # Gives the demo canaries real metrics to read. Exposes one healthy service
   # and one that breaches the error budget, so the promotion recording and the

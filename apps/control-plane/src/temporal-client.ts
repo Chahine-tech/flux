@@ -23,6 +23,15 @@ export class TemporalClient extends Context.Service<TemporalClient, {
   /** Takes the already-compiled input: the dependency plan is resolved by the handler, not here. */
   readonly startMulti: (input: MultiServiceInput) => Effect.Effect<string>
   readonly status: (workflowId: string) => Effect.Effect<DeploymentState, DeploymentNotFound>
+  /**
+   * Whether the cluster is reachable *and* the namespace flux works in is
+   * registered — a readiness signal, not a liveness one.
+   *
+   * `describeNamespace` rather than `getSystemInfo` on purpose: a cluster that
+   * is up but whose namespace is missing or deregistered would pass the cheaper
+   * call and then fail every real operation.
+   */
+  readonly reachable: Effect.Effect<boolean>
   readonly list: (
     service: string | undefined,
     limit: number
@@ -56,6 +65,9 @@ export interface ClosedDeployment {
   readonly status: string
   readonly durationMs: number
 }
+
+// temporal.api.enums.v1.NamespaceState.NAMESPACE_STATE_REGISTERED
+const NAMESPACE_STATE_REGISTERED = 1
 
 const firstString = (value: unknown): string | undefined =>
   Array.isArray(value) && typeof value[0] === "string" ? value[0] : undefined
@@ -106,6 +118,18 @@ export const make = (client: Client): typeof TemporalClient.Service => {
         try: () => handle(workflowId).query<DeploymentState>("status"),
         catch: (error) => classifyNotFound(error, workflowId)
       }),
+
+    reachable: Effect.tryPromise(async () => {
+      const { namespaceInfo } = await client.connection.workflowService.describeNamespace({
+        namespace: client.options.namespace
+      })
+      // REGISTERED is the only state that can serve work; DEPRECATED and
+      // DELETED are reachable but useless to a deployment. The wire value is
+      // the numeric enum — `JSON.stringify` renders it as its name, which is
+      // what made an early version of this compare against a string and report
+      // "not ready" against a perfectly healthy cluster.
+      return namespaceInfo?.state === NAMESPACE_STATE_REGISTERED
+    }).pipe(Effect.catchCause(() => Effect.succeed(false))),
 
     list: (service, limit) =>
       Effect.promise(async () => {

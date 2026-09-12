@@ -113,6 +113,17 @@ const runWithDecision = async (
 }
 
 describe("control plane e2e", () => {
+  it("reports the namespace reachable, against a real server", async () => {
+    // The health endpoint's own tests stub this; here the real
+    // `describeNamespace` call runs. Worth its own test because the wire value
+    // is a numeric enum and `JSON.stringify` renders it as a name — an early
+    // version compared against the string and reported a healthy cluster as
+    // not ready, which no stub would have caught. The *negative* case lives in
+    // `real-schedules.test.ts` instead: the time-skipping server registers a
+    // namespace on demand, so an absent one comes back healthy here.
+    expect(await Effect.runPromise(make(env.client).reachable)).toBe(true)
+  })
+
   it("stamps the service as the deployment's fairness key", async () => {
     const temporal = make(env.client)
     // No worker needed: the start event is recorded whether or not anything

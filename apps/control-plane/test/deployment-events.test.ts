@@ -36,7 +36,8 @@ const makeSetup = () => {
     approve: () => Effect.void,
     abort: () => Effect.void,
     ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
-    disableDrift: () => Effect.void
+    disableDrift: () => Effect.void,
+    reachable: Effect.succeed(true)
   })
   const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
   return { EventsLive, setState: (next: DeploymentState) => (current = next) }
@@ -115,7 +116,8 @@ describe("deployment events poller", () => {
       approve: () => Effect.void,
       abort: () => Effect.void,
       ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
-      disableDrift: () => Effect.void
+      disableDrift: () => Effect.void,
+    reachable: Effect.succeed(true)
     })
     const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
 
@@ -151,7 +153,8 @@ describe("deployment events poller", () => {
       approve: () => Effect.void,
       abort: () => Effect.void,
       ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
-      disableDrift: () => Effect.void
+      disableDrift: () => Effect.void,
+    reachable: Effect.succeed(true)
     })
     const EventsLive = layer({
       pollInterval: "5 seconds",
@@ -184,7 +187,8 @@ describe("deployment events poller", () => {
       approve: () => Effect.void,
       abort: () => Effect.void,
       ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
-      disableDrift: () => Effect.void
+      disableDrift: () => Effect.void,
+    reachable: Effect.succeed(true)
     })
     const EventsLive = layer({
       pollInterval: "5 seconds",
@@ -226,7 +230,8 @@ describe("deployment events poller", () => {
       approve: () => Effect.void,
       abort: () => Effect.void,
       ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
-      disableDrift: () => Effect.void
+      disableDrift: () => Effect.void,
+    reachable: Effect.succeed(true)
     })
     const EventsLive = layer({ pollInterval: "5 seconds", maxTracked: 100 }).pipe(Layer.provide(FakeTemporal))
 

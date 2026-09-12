@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { Client, Connection } from "@temporalio/client"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { deleteDriftSchedule, driftScheduleId, ensureDriftSchedule } from "../src/schedules.ts"
+import { make } from "../src/temporal-client.ts"
 
 /**
  * Real-cluster proof for Temporal Schedules: the time-skipping test
@@ -25,6 +26,20 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await client?.connection.close()
+})
+
+describe.skipIf(!REAL)("readiness against a real cluster", () => {
+  it("reports the configured namespace reachable", async () => {
+    expect(await Effect.runPromise(make(client).reachable)).toBe(true)
+  })
+
+  it("reports a namespace nobody registered as not reachable", async () => {
+    // Here rather than in the time-skipping e2e, which registers a namespace on
+    // demand and so answers "healthy" for one that does not exist. Without this
+    // the readiness probe could be decorative and every test would still pass.
+    const elsewhere = new Client({ connection: client.connection, namespace: "flux-no-such-namespace" })
+    expect(await Effect.runPromise(make(elsewhere).reachable)).toBe(false)
+  })
 })
 
 describe.skipIf(!REAL)("drift schedules on a real cluster", () => {

@@ -75,14 +75,18 @@ jobs:
       # everything came up correctly. The one-shot runs as its own step instead,
       # where its exit code is the script's own. `run` still honours the
       # `service_healthy` dependency, so ordering is unchanged.
-      - run: docker compose up -d --wait postgresql temporal
+      # Caddy comes up too: the router adapter is the one whose shape fits a pod
+      # topology (D40), and until now it had only ever driven an HTTP double.
+      - run: docker compose --profile demo up -d --wait postgresql temporal caddy demo-target
 
       - run: docker compose run --rm temporal-namespace
 
       - run: FLUX_REAL_TEMPORAL=1 pnpm --filter @flux/worker --filter @flux/control-plane test
 
+      - run: FLUX_REAL_CADDY=1 pnpm --filter @flux/adapters test
+
       # The namespace step runs with `run --rm`, so its output is already inline
       # above and it leaves no container to read logs from.
       - name: Temporal logs
         if: failure()
-        run: docker compose logs --tail 80 temporal-setup temporal
+        run: docker compose logs --tail 80 temporal-setup temporal caddy

@@ -209,7 +209,9 @@ Three tiers, because a learning project is only worth as much as what holds up.
 **End to end, against a real (time-skipping) Temporal.** The canary workflow
 (sequencing, saga rollback, approval gate, typed-failure → `Failed`). The control
 plane's client, trigger through outcome. Multi-service fail-fast. The cancellable
-monitor. `continueAsNew`. And, with the real adapters pointed at local HTTP
+monitor. `continueAsNew`. The Caddy router adapter drives a **real Caddy** over its
+admin API, including a fetch through the proxy to check the config it wrote is one
+Caddy serves and not just one it stores. And, with the real adapters pointed at local HTTP
 doubles, a full canary to `Succeeded` that checks the side effects actually
 happened: the health endpoint got probed, the nginx config got written.
 Three captured histories — a promotion, a rollback, and a dependency-ordered
