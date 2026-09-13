@@ -31,10 +31,13 @@ controlPlane:
 
 worker:
   replicas: 2
-  # The knob the whole tier exists to study. Longer than an in-flight activity
-  # and the worker drains and finishes it; shorter and Kubernetes SIGKILLs it,
-  # the server notices the missed heartbeats, and another worker resumes. That is
-  # D27's proof, triggered by the infrastructure instead of by hand.
+  # Measured, and it does not bind (D58). The guess written here first was that
+  # a long grace lets a draining worker finish its in-flight activity and a
+  # short one gets it SIGKILLed. Neither happens: with one worker holding a
+  # monitor activity for certain, the pod is gone in under a second at a 30
+  # second grace, because the SDK hands the task back to the queue rather than
+  # finishing it, and another worker picks it up. Kept at 30 as headroom for a
+  # shutdown path that might one day need it, not as a tuned value.
   terminationGracePeriodSeconds: 30
   resources:
     requests: { cpu: 200m, memory: 256Mi }

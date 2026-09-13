@@ -23,12 +23,11 @@ spec:
       annotations:
         flux.config/checksum: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
     spec:
-      # The knob this whole tier exists to study. The Temporal SDK installs its
-      # own SIGTERM handler and drains, so a grace period longer than the
-      # in-flight activity lets the worker finish and exit clean; a shorter one
-      # ends in SIGKILL, the server notices the missed heartbeats, and another
-      # worker resumes the canary. That is D27's proof, triggered by the
-      # orchestrator instead of by hand.
+      # The Temporal SDK installs its own SIGTERM handler and drains, but
+      # draining means handing in-flight tasks back to the queue rather than
+      # finishing them, so this period is never reached (measured in D58: gone
+      # in under a second against 30). The canary continues on whichever worker
+      # picks the task up, which is D27's proof triggered by the orchestrator.
       terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds }}
       # flux needs no privileges, and D46 already found it needs no RBAC either.
       # This is the same claim from the kernel's side: no root, no capabilities,
