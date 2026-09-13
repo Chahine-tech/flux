@@ -34,6 +34,36 @@ jobs:
           helm template flux deploy/kubernetes/chart --set router.type=nginx >> /tmp/rendered.yaml
           python3 -c "import sys, yaml; list(yaml.safe_load_all(open('/tmp/rendered.yaml'))); print('rendered YAML parses')"
 
+      # The hardening is a claim the chart makes about flux ("it needs no root,
+      # no capabilities and no writable image"), and claims that nothing checks
+      # come undone quietly. Rendering is the cheapest place to hold it.
+      - name: The chart still refuses to run flux privileged
+        run: |
+          helm template flux deploy/kubernetes/chart > /tmp/hardening.yaml
+          python3 - <<'PY'
+          import yaml
+          required = {"flux-worker", "flux-control-plane"}
+          seen = set()
+          for doc in yaml.safe_load_all(open("/tmp/hardening.yaml")):
+              if not doc or doc.get("kind") != "Deployment":
+                  continue
+              name = doc["metadata"]["name"]
+              if name not in required:
+                  continue
+              seen.add(name)
+              spec = doc["spec"]["template"]["spec"]
+              pod = spec.get("securityContext", {})
+              assert pod.get("runAsNonRoot") is True, f"{name}: runAsNonRoot"
+              assert pod.get("seccompProfile", {}).get("type") == "RuntimeDefault", f"{name}: seccomp"
+              for container in spec["containers"]:
+                  sec = container.get("securityContext", {})
+                  assert sec.get("readOnlyRootFilesystem") is True, f"{name}: readOnlyRootFilesystem"
+                  assert sec.get("allowPrivilegeEscalation") is False, f"{name}: allowPrivilegeEscalation"
+                  assert sec.get("capabilities", {}).get("drop") == ["ALL"], f"{name}: capabilities"
+          assert seen == required, f"missing deployments: {required - seen}"
+          print("both flux deployments are non-root, unprivileged and read-only")
+          PY
+
       # Built once, here, and handed to every job that needs it. The images
       # assemble a build rather than producing one, so three jobs were each
       # running the same `pnpm install` and the same tsdown pass to produce

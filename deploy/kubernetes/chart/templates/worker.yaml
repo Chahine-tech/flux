@@ -30,10 +30,25 @@ spec:
       # worker resumes the canary. That is D27's proof, triggered by the
       # orchestrator instead of by hand.
       terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds }}
+      # flux needs no privileges, and D46 already found it needs no RBAC either.
+      # This is the same claim from the kernel's side: no root, no capabilities,
+      # no writable image, nothing to escalate into.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: "{{ .Values.image.worker.repository }}:{{ .Values.image.worker.tag }}"
           imagePullPolicy: {{ .Values.image.worker.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           ports:
             - name: metrics
               containerPort: 9464
@@ -59,6 +74,8 @@ spec:
             - secretRef:
                 name: {{ .Release.Name }}-secrets
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: config
               mountPath: /etc/flux
               readOnly: true
@@ -74,6 +91,10 @@ spec:
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
       volumes:
+        - name: tmp
+          # A read-only root filesystem still has to leave somewhere for the
+          # runtime's scratch files.
+          emptyDir: {}
         - name: config
           configMap:
             name: {{ .Release.Name }}-config

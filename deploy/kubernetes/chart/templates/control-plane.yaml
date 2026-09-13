@@ -28,10 +28,25 @@ spec:
         # mount alone would not do.
         flux.config/checksum: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
     spec:
+      # flux needs no privileges, and D46 already found it needs no RBAC either.
+      # This is the same claim from the kernel's side: no root, no capabilities,
+      # no writable image, nothing to escalate into.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: control-plane
           image: "{{ .Values.image.controlPlane.repository }}:{{ .Values.image.controlPlane.tag }}"
           imagePullPolicy: {{ .Values.image.controlPlane.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           ports:
             - name: http
               containerPort: 8080
@@ -42,6 +57,12 @@ spec:
               value: {{ .Values.temporal.address | quote }}
             - name: TEMPORAL_NAMESPACE
               value: {{ .Values.temporal.namespace | quote }}
+            # The volume below was mounted but never pointed at: the default is
+            # relative to the workdir, so the read model was being written into
+            # the image's writable layer and the emptyDir sat unused. A
+            # read-only root filesystem turns that from invisible to fatal.
+            - name: READ_MODEL_DB
+              value: /srv/data/flux-read-model.db
             {{- with .Values.observability.otlpEndpoint }}
             - name: OTLP_ENDPOINT
               value: {{ . | quote }}
@@ -59,6 +80,8 @@ spec:
               readOnly: true
             - name: read-model
               mountPath: /srv/data
+            - name: tmp
+              mountPath: /tmp
           # Liveness ignores Temporal on purpose: a restart cannot fix a
           # Temporal outage, and it would discard the admission state of
           # deployments still running. Readiness does depend on it, so an
@@ -78,6 +101,10 @@ spec:
         - name: config
           configMap:
             name: {{ .Release.Name }}-config
+        - name: tmp
+          # A read-only root filesystem still has to leave somewhere for the
+          # runtime's scratch files.
+          emptyDir: {}
         - name: read-model
           # Deliberately ephemeral: the read model is a projection the poller
           # rebuilds from Temporal, so losing it costs a re-projection, not

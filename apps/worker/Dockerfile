@@ -50,4 +50,10 @@ EXPOSE 9464
 
 # No shell wrapper: the worker must receive SIGTERM directly so the Temporal
 # SDK's own drain runs before the grace period expires (the knob D40 is about).
+# Nothing here needs root: the process binds an unprivileged port and reads
+# what the build put in place. The core-bridge is loaded from the image, not written to it.
+# The chart enforces this again with `runAsNonRoot`, so an image that quietly
+# went back to root would be refused rather than accepted.
+USER node
+
 CMD ["node", "dist/main.mjs"]

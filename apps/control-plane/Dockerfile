@@ -33,4 +33,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://localhost:8080/health/ready').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 
+# Nothing here needs root: the process binds an unprivileged port and reads
+# what the build put in place. Its SQLite read model lives on a mounted volume, not in the image.
+# The chart enforces this again with `runAsNonRoot`, so an image that quietly
+# went back to root would be refused rather than accepted.
+USER node
+
 CMD ["node", "dist/main.mjs"]
