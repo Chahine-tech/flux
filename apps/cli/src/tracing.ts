@@ -1,6 +1,7 @@
 import { Duration, Effect, Layer } from "effect"
 import { Otlp } from "effect/unstable/observability"
 import { NodeHttpClient } from "@effect/platform-node"
+import { tracingLayer } from "@flux/observability"
 
 /**
  * The CLI's root span, and the reason the trace reaches the control plane at
@@ -33,15 +34,9 @@ import { NodeHttpClient } from "@effect/platform-node"
  * pay it. Hence both the gate and the shorter timeout, since a CLI that cannot
  * reach its collector should give up long before a server would.
  */
-const tracingLayer = (): Layer.Layer<never> => {
-  const endpoint = process.env.OTLP_ENDPOINT
-  if (endpoint === undefined) return Layer.empty
-  return Otlp.layerJson({
-    baseUrl: endpoint,
-    resource: { serviceName: "flux-cli" },
-    shutdownTimeout: Duration.seconds(1)
-  }).pipe(Layer.provide(NodeHttpClient.layerUndici))
-}
+const cliTracing = (): Layer.Layer<never> =>
+  tracingLayer("flux-cli", { shutdownTimeout: Duration.seconds(1) })
+    .pipe(Layer.provide(NodeHttpClient.layerUndici))
 
 /**
  * Wrap a command in its root span. Applied outermost, after the command's own
@@ -55,5 +50,5 @@ const tracingLayer = (): Layer.Layer<never> => {
 export const tracedCommand = (name: string) => <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   effect.pipe(
     Effect.withSpan(`flux ${name}`),
-    Effect.provide(tracingLayer())
+    Effect.provide(cliTracing())
   )

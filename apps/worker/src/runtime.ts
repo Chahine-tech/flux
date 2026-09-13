@@ -12,6 +12,7 @@ import {
   SlackNotify
 } from "@flux/adapters"
 import { fluxConfig, type FluxConfig, layerFromToml } from "@flux/config"
+import { loggerLayer, tracingLayer } from "@flux/observability"
 import type { AppServices } from "@flux/orchestration"
 import { BoundedHttpClient } from "./http-timeout.ts"
 
@@ -40,10 +41,7 @@ const ConfigLayer = layerFromToml(process.env.FLUX_CONFIG ?? "flux.config.toml")
 
 // Export Effect spans (activities, use cases, Prometheus HTTP calls) via OTLP.
 // Effect v4 has a native OTLP tracer — no external OpenTelemetry SDK needed.
-const TracingLayer = Otlp.layerJson({
-  baseUrl: process.env.OTLP_ENDPOINT ?? "http://localhost:4318",
-  resource: { serviceName: "flux-worker" }
-}).pipe(Layer.provide(NodeHttpClient.layerUndici))
+const TracingLayer = tracingLayer("flux-worker").pipe(Layer.provide(NodeHttpClient.layerUndici))
 
 // Both routers resolve backends the same way: one `service-version` host per
 // deployed version (the compose topology). `versionOf` is the inverse — how the
@@ -127,7 +125,10 @@ const CoreLayer: Layer.Layer<AppServices> = Layer.unwrap(
   Layer.provide(NodeFileSystem.layer)
 )
 
-export const AppLayer: Layer.Layer<AppServices> = Layer.mergeAll(CoreLayer, TracingLayer)
+// The logger goes in the runtime rather than being installed globally, so
+// everything running through it writes the same way: the use cases, the
+// activities, and since D24's deferred half, every workflow's own log lines.
+export const AppLayer: Layer.Layer<AppServices> = Layer.mergeAll(CoreLayer, TracingLayer, loggerLayer())
 
 export const makeRuntime = (): ManagedRuntime.ManagedRuntime<AppServices, never> =>
   ManagedRuntime.make(AppLayer)

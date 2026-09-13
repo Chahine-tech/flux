@@ -44,6 +44,14 @@ spec:
               value: {{ .Values.temporal.address | quote }}
             - name: TEMPORAL_NAMESPACE
               value: {{ .Values.temporal.namespace | quote }}
+            {{- with .Values.observability.otlpEndpoint }}
+            - name: OTLP_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.observability.environment }}
+            - name: FLUX_ENV
+              value: {{ . | quote }}
+            {{- end }}
             # The canary's target, not this pod's own health.
             - name: HEALTH_URL
               value: {{ .Values.health.url | quote }}

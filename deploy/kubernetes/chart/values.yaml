@@ -88,3 +88,10 @@ secrets:
   slackWebhook: ""
   githubToken: ""
   apiToken: ""
+
+# Where spans go, and what they are labelled with. An empty endpoint means no
+# export at all rather than a guess: the apps used to default to
+# `localhost:4318`, which inside a pod is the pod itself.
+observability:
+  otlpEndpoint: "http://jaeger:4318"
+  environment: "k3d-lab"

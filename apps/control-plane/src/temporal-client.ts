@@ -10,6 +10,7 @@ import {
   WorkflowUpdateFailedError
 } from "@temporalio/client"
 import { deleteDriftSchedule, ensureDriftSchedule as ensureDriftScheduleImpl } from "./schedules.ts"
+import { withDeadline } from "./temporal-deadline.ts"
 
 /**
  * Port to Temporal for the control plane — the single place the HTTP handlers
@@ -104,11 +105,14 @@ const firstString = (value: unknown): string | undefined =>
 export const make = (client: Client): typeof TemporalClient.Service => {
   const handle = (workflowId: string) => client.workflow.getHandle(workflowId)
 
+  const deadline = <A>(fn: () => Promise<A>): Promise<A> => withDeadline(client.connection, fn)
+
   return {
     // The current span (the HTTP request's) becomes the trace root the
     // whole deployment — CLI/control-plane through every activity — shares.
     start: (request) =>
-      withClientTraceContext(async () => {
+      withClientTraceContext(() =>
+        deadline(async () => {
         const workflowId = `dep-${request.service}-${Date.now()}`
         await client.workflow.start(WORKFLOW_TYPE, {
           taskQueue: TASK_QUEUE,
@@ -124,10 +128,11 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           args: [request as DeploymentInput]
         })
         return workflowId
-      }, (error) => unavailable("start", error)),
+        }), (error) => unavailable("start", error)),
 
     startMulti: (input) =>
-      withClientTraceContext(async () => {
+      withClientTraceContext(() =>
+        deadline(async () => {
         const workflowId = `multi-${Date.now()}`
         await client.workflow.start("multiServiceDeployment", {
           taskQueue: TASK_QUEUE,
@@ -135,26 +140,27 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           args: [input]
         })
         return workflowId
-      }, (error) => unavailable("startMulti", error)),
+        }), (error) => unavailable("startMulti", error)),
 
     status: (workflowId) =>
       Effect.tryPromise({
-        try: () => handle(workflowId).query<DeploymentState>("status"),
+        try: () => deadline(() => handle(workflowId).query<DeploymentState>("status")),
         catch: (error) => classifyNotFound(error, workflowId)
       }),
 
     execution: (workflowId) =>
       Effect.tryPromise({
-        try: async () => {
+        try: () => deadline(async () => {
           const description = await handle(workflowId).describe()
           // `status.name` is the string form; RUNNING and the continued-as-new
           // states are the ones that still hold their slot.
           return description.status.name === "RUNNING" ? "open" as const : "closed" as const
-        },
+        }),
         catch: (error) => (error instanceof WorkflowNotFoundError ? "missing" as const : "unknown" as const)
       }).pipe(Effect.catch(Effect.succeed)),
 
-    reachable: Effect.tryPromise(async () => {
+    reachable: Effect.tryPromise(() =>
+      deadline(async () => {
       const { namespaceInfo } = await client.connection.workflowService.describeNamespace({
         namespace: client.options.namespace
       })
@@ -163,12 +169,12 @@ export const make = (client: Client): typeof TemporalClient.Service => {
       // the numeric enum — `JSON.stringify` renders it as its name, which is
       // what made an early version of this compare against a string and report
       // "not ready" against a perfectly healthy cluster.
-      return namespaceInfo?.state === NAMESPACE_STATE_REGISTERED
-    }).pipe(Effect.catchCause(() => Effect.succeed(false))),
+        return namespaceInfo?.state === NAMESPACE_STATE_REGISTERED
+      })).pipe(Effect.catchCause(() => Effect.succeed(false))),
 
     list: (service, limit) =>
       Effect.tryPromise({
-        try: async () => {
+        try: () => deadline(async () => {
         const filter = service === undefined || service === ""
           ? ""
           : ` AND ${SEARCH_ATTRIBUTES.service} = '${service}'`
@@ -183,13 +189,13 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           if (summaries.length >= limit) break
         }
         return summaries
-        },
+        }),
         catch: (error) => unavailable("list", error)
       }),
 
     listRunningIds: (limit) =>
       Effect.tryPromise({
-        try: async () => {
+        try: () => deadline(async () => {
         const query = `WorkflowType = '${WORKFLOW_TYPE}' AND ExecutionStatus = 'Running'`
         const ids: Array<string> = []
         for await (const execution of client.workflow.list({ query })) {
@@ -197,13 +203,13 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           if (ids.length >= limit) break
         }
         return ids
-        },
+        }),
         catch: (error) => unavailable("listRunningIds", error)
       }),
 
     listClosed: (limit) =>
       Effect.tryPromise({
-        try: async () => {
+        try: () => deadline(async () => {
         // flux workflows always complete normally (they return a result even on
         // rollback/failure); the business outcome lives in FluxStatus.
         const query = `WorkflowType = '${WORKFLOW_TYPE}' AND ExecutionStatus = 'Completed'`
@@ -221,19 +227,19 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           if (closed.length >= limit) break
         }
         return closed
-        },
+        }),
         catch: (error) => unavailable("listClosed", error)
       }),
 
     approve: (workflowId) =>
       Effect.tryPromise({
-        try: () => handle(workflowId).executeUpdate("approve"),
+        try: () => deadline(() => handle(workflowId).executeUpdate("approve")),
         catch: (error) => classifyUpdate(error, workflowId)
       }),
 
     abort: (workflowId) =>
       Effect.tryPromise({
-        try: () => handle(workflowId).executeUpdate("abort"),
+        try: () => deadline(() => handle(workflowId).executeUpdate("abort")),
         catch: (error) => classifyNotFound(error, workflowId)
       }),
 

@@ -42,6 +42,14 @@ spec:
               value: {{ .Values.temporal.address | quote }}
             - name: TEMPORAL_NAMESPACE
               value: {{ .Values.temporal.namespace | quote }}
+            {{- with .Values.observability.otlpEndpoint }}
+            - name: OTLP_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.observability.environment }}
+            - name: FLUX_ENV
+              value: {{ . | quote }}
+            {{- end }}
           envFrom:
             - secretRef:
                 name: {{ .Release.Name }}-secrets

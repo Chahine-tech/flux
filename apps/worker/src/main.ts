@@ -1,9 +1,10 @@
 import { createServer } from "node:http"
-import { NativeConnection, Worker } from "@temporalio/worker"
+import { NativeConnection, Runtime, Worker } from "@temporalio/worker"
 import { activityInterceptors, createActivities, makePayloadCodec, metricsPrometheusText } from "@flux/orchestration"
 import type { ManagedRuntime } from "effect"
 import type { AppServices } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
+import { effectLogger } from "./temporal-logger.ts"
 import { ensureSearchAttributes } from "./search-attributes.ts"
 import { pollerBehaviors, tuner, versioningOptions, workflowSource } from "./worker-config.ts"
 
@@ -38,6 +39,12 @@ const main = async (): Promise<void> => {
   const namespace = process.env.TEMPORAL_NAMESPACE ?? "default"
 
   const runtime = makeRuntime()
+  // Before anything else touches the SDK: `Runtime.install` fails once a
+  // Runtime exists, and `ensureSearchAttributes` below opens a connection.
+  // From here the SDK's own logs and every workflow's `log.*` arrive in
+  // Effect's logger, correlated with the activity logs of the same deployment
+  // instead of going out to stderr on their own.
+  Runtime.install({ logger: effectLogger(runtime) })
   const metricsServer = startMetricsServer(runtime)
   await ensureSearchAttributes(address, namespace)
   const connection = await NativeConnection.connect({ address })

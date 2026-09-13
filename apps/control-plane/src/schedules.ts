@@ -1,4 +1,5 @@
 import { type TemporalUnavailable, temporalUnavailable } from "@flux/contracts"
+import { withDeadline } from "./temporal-deadline.ts"
 import { Effect } from "effect"
 import type { DriftCheckInput } from "@flux/orchestration"
 import type { Client } from "@temporalio/client"
@@ -30,24 +31,25 @@ export const ensureDriftSchedule = (
   options: DriftScheduleOptions
 ): Effect.Effect<string, TemporalUnavailable> =>
   Effect.tryPromise({
-    try: async () => {
-    const scheduleId = driftScheduleId(options.desired.service)
-    const spec = { intervals: [{ every: `${options.everyMs}ms` }] }
-    const action = {
-      type: "startWorkflow" as const,
-      workflowType: "driftCheck",
-      taskQueue: TASK_QUEUE,
-      workflowId: `${scheduleId}-run`,
-      args: [options.desired]
-    }
-    try {
-      await client.schedule.create({ scheduleId, spec, action })
-    } catch {
-      // Already exists → keep the desired state and interval current.
-      await client.schedule.getHandle(scheduleId).update((previous) => ({ ...previous, spec, action }))
-    }
-      return scheduleId
-    },
+    try: () =>
+      withDeadline(client.connection, async () => {
+        const scheduleId = driftScheduleId(options.desired.service)
+        const spec = { intervals: [{ every: `${options.everyMs}ms` }] }
+        const action = {
+          type: "startWorkflow" as const,
+          workflowType: "driftCheck",
+          taskQueue: TASK_QUEUE,
+          workflowId: `${scheduleId}-run`,
+          args: [options.desired]
+        }
+        try {
+          await client.schedule.create({ scheduleId, spec, action })
+        } catch {
+          // Already exists → keep the desired state and interval current.
+          await client.schedule.getHandle(scheduleId).update((previous) => ({ ...previous, spec, action }))
+        }
+        return scheduleId
+      }),
     catch: (error) => temporalUnavailable("ensureDriftSchedule", error)
   })
 
@@ -58,12 +60,13 @@ export const ensureDriftSchedule = (
  */
 export const deleteDriftSchedule = (client: Client, service: string): Effect.Effect<void, TemporalUnavailable> =>
   Effect.tryPromise({
-    try: async () => {
-      try {
-        await client.schedule.getHandle(driftScheduleId(service)).delete()
-      } catch {
-        // Not found → already off.
-      }
-    },
+    try: () =>
+      withDeadline(client.connection, async () => {
+        try {
+          await client.schedule.getHandle(driftScheduleId(service)).delete()
+        } catch {
+          // Not found → already off.
+        }
+      }),
     catch: (error) => temporalUnavailable("disableDrift", error)
   })

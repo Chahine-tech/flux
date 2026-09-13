@@ -89,6 +89,9 @@ importers:
       '@flux/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@flux/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@flux/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration
@@ -129,6 +132,9 @@ importers:
       '@flux/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@flux/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@flux/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration
@@ -184,6 +190,9 @@ importers:
       '@flux/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@flux/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@flux/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration
@@ -362,6 +371,22 @@ importers:
       fast-check:
         specifier: 'catalog:'
         version: 4.10.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.0(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.0))
+
+  packages/observability:
+    dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.113
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

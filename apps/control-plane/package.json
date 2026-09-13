@@ -15,6 +15,7 @@
     "@effect/sql-sqlite-node": "catalog:",
     "@flux/contracts": "workspace:*",
     "@flux/domain": "workspace:*",
+    "@flux/observability": "workspace:*",
     "@flux/orchestration": "workspace:*",
     "@temporalio/client": "catalog:",
     "@temporalio/common": "catalog:",

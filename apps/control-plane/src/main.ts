@@ -1,5 +1,6 @@
 import { Config, Effect, Layer } from "effect"
 import { Otlp } from "effect/unstable/observability"
+import { loggerLayer, tracingLayer } from "@flux/observability"
 import { SqliteClient } from "@effect/sql-sqlite-node"
 import { NodeHttpClient, NodeRuntime } from "@effect/platform-node"
 import * as Admission from "./admission.ts"
@@ -41,10 +42,7 @@ const config = Config.all({
  * `withClientTraceContext` to pick up and carry into the workflow. With the
  * tracer in place the chain runs unbroken from `flux deploy` to every activity.
  */
-const TracingLayer = Otlp.layerJson({
-  baseUrl: process.env.OTLP_ENDPOINT ?? "http://localhost:4318",
-  resource: { serviceName: "flux-control-plane" }
-}).pipe(Layer.provide(NodeHttpClient.layerUndici))
+const TracingLayer = tracingLayer("flux-control-plane").pipe(Layer.provide(NodeHttpClient.layerUndici))
 
 const MainLive = Layer.unwrap(
   Effect.map(config, (cfg) => {
@@ -76,7 +74,9 @@ const MainLive = Layer.unwrap(
       Layer.provide(SqliteClient.layer({ filename: cfg.readModelDb })),
       Layer.provide(Admission.layer(cfg.maxConcurrent)),
       Layer.provide(TemporalClient.layer({ address: cfg.temporalAddress, namespace: cfg.temporalNamespace })),
-      Layer.provide(TracingLayer)
+      Layer.provide(TracingLayer),
+      // Structured when something is parsing, readable when someone is.
+      Layer.provide(loggerLayer())
     )
   })
 )
