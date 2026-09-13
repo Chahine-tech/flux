@@ -90,6 +90,37 @@ const run = async (
   ) as Promise<DeploymentResult>
 }
 
+/**
+ * Like `run`, but also hands back the state the workflow reports once it is
+ * over. Querying a closed workflow is allowed, and it is the only way to see
+ * what an operator running `flux status` after the fact would be told.
+ */
+const runAndQuery = async (
+  activities: DeploymentActivities,
+  input: DeploymentInput = baseInput
+): Promise<{ readonly result: DeploymentResult; readonly finalState: DeploymentState }> => {
+  const worker = await Worker.create({
+    connection: env.nativeConnection,
+    namespace: env.namespace ?? "default",
+    taskQueue: TASK_QUEUE,
+    workflowBundle,
+    activities
+  })
+  const workflowId = `wf-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  // Both inside `runUntil`: a query is answered by replaying the workflow on a
+  // worker, so querying after the worker has shut down simply hangs. The same
+  // shape as `FAILED_PRECONDITION: no poller seen for task queue recently`.
+  return worker.runUntil(async () => {
+    const result = await env.client.workflow.execute("deploymentWorkflow", {
+      taskQueue: TASK_QUEUE,
+      workflowId,
+      args: [input]
+    }) as DeploymentResult
+    const finalState = await env.client.workflow.getHandle(workflowId).query<DeploymentState>("status")
+    return { result, finalState }
+  })
+}
+
 // Poll the workflow's `status` query until it reaches `phase`. Time-skipping
 // fast-forwards the workflow's own timers, but reaching a queryable phase still
 // takes a few real milliseconds, so we poll rather than assume a delay. Throws
@@ -386,3 +417,53 @@ describe("deploymentWorkflow", () => {
     }
   })
 }, 120_000)
+
+/**
+ * What the workflow says about itself once it is over.
+ *
+ * A k3d run (D50) showed the reported state outliving the traffic: a canary
+ * rolled back to the previous version still answered `currentPercent: 10`,
+ * because the saga restored the router without touching the state it reports.
+ * An operator reading `flux status` afterwards would conclude a tenth of
+ * production was still on the version that had just failed.
+ */
+describe("the state a finished deployment reports", () => {
+  it("says nothing is on the new version once the rollback restored traffic", async () => {
+    let step = 0
+    const { finalState, result } = await runAndQuery({
+      ...okActivities(),
+      monitorStep: async () =>
+        (++step >= 2
+          ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] }
+          : { _tag: "Within" })
+    })
+    expect(result.kind).toBe("RolledBack")
+    expect(finalState.phase).toBe("done")
+    // The number that matters, and the one that used to be the last percentage
+    // attempted rather than the percentage in effect.
+    expect(finalState.currentPercent).toBe(0)
+  })
+
+  it("keeps the percentage when the undo itself failed, because traffic may really be stranded", async () => {
+    // The one case where the old value was the true one. A compensation that
+    // throws leaves the router wherever it was, so reporting 0 here would be
+    // the same lie in the opposite direction, and on the more dangerous side.
+    let step = 0
+    const { finalState } = await runAndQuery({
+      ...okActivities(),
+      monitorStep: async () =>
+        (++step >= 2
+          ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] }
+          : { _tag: "Within" }),
+      // `setTrafficWeight` serves both directions, so failing it outright would
+      // break the first forward shift and the workflow would never reach a
+      // rollback at all. Only the undo fails: the previous version back at 100%.
+      setTrafficWeight: async (p: { readonly version: string; readonly weight: number }) => {
+        if (p.version === baseInput.previousVersion && p.weight === 100) {
+          throw new Error("router unreachable")
+        }
+      }
+    } as unknown as DeploymentActivities)
+    expect(finalState.currentPercent).toBeGreaterThan(0)
+  })
+})

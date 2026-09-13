@@ -144,6 +144,19 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
         log.error("compensation failed", { error: String(error) })
       }
     }
+    // The percentage has to follow the traffic, not the last thing attempted.
+    // It did not, and a k3d run showed what that costs (D50): a rolled-back
+    // deployment still reported `currentPercent: 10` while the router was back
+    // to 100% on the previous version, so `flux status` told an operator a
+    // tenth of production was still pointed at the version that just failed.
+    //
+    // A *failed* undo is the one case where the old value is the true one:
+    // traffic really may be stranded on the bad version, which is what the
+    // breach path escalates on. So the distinction the saga already tracks
+    // becomes the distinction the state reports.
+    if (restored) {
+      state = { ...state, currentPercent: 0 }
+    }
     return restored
   }
 

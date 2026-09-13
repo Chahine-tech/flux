@@ -13,6 +13,7 @@ import {
 } from "@flux/adapters"
 import { fluxConfig, type FluxConfig, layerFromToml } from "@flux/config"
 import type { AppServices } from "@flux/orchestration"
+import { BoundedHttpClient } from "./http-timeout.ts"
 
 /**
  * Composition root for the worker.
@@ -28,8 +29,9 @@ const SpawnerLayer = NodeChildProcessSpawner.layer.pipe(
   Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))
 )
 
+
 const PlatformLayer = Layer.mergeAll(
-  NodeHttpClient.layerUndici,
+  BoundedHttpClient,
   NodeFileSystem.layer,
   SpawnerLayer
 )
