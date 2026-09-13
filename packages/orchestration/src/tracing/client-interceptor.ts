@@ -37,12 +37,22 @@ export const traceparentClientInterceptor: WorkflowClientInterceptor = {
  * the SDK's internal Promise continuations that invoke the interceptor — on
  * the same async lineage ALS actually tracks.
  */
-export const withClientTraceContext = <A>(thunk: () => Promise<A>): Effect.Effect<A> =>
+export const withClientTraceContext = <A, E>(
+  thunk: () => Promise<A>,
+  onError: (error: unknown) => E
+): Effect.Effect<A, E> =>
   Effect.gen(function*() {
     const span = yield* Effect.option(Effect.currentSpan)
     const traceparent = Option.match(span, {
       onNone: () => undefined,
       onSome: (s) => formatTraceparent(s.traceId, s.spanId)
     })
-    return yield* Effect.promise(() => storage.run(traceparent, thunk))
+    // `tryPromise`, not `promise`: this wraps a gRPC call, and swallowing its
+    // rejection into a defect is what let a Temporal outage travel invisibly
+    // past every caller's error handling. The caller says what the failure
+    // means, since only it knows which operation was being attempted.
+    return yield* Effect.tryPromise({
+      try: () => storage.run(traceparent, thunk),
+      catch: onError
+    })
   })

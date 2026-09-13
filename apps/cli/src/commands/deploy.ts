@@ -87,5 +87,10 @@ export const deploy = Command.make("deploy", {
       Console.error(`[flux] rejected: ${error.service} already has a deployment in flight`)),
     Effect.catchTag("OutsideDeploymentWindow", (error) =>
       Console.error(`[flux] rejected: outside deploy window "${error.window}" — next opens ${error.nextAllowed}`)),
+    Effect.catchTag("TemporalUnavailable", (error) =>
+      Console.error(
+        `[flux] the control plane could not reach Temporal (${error.operation}): ${error.detail}` +
+          ", nothing was started, retry when it is back"
+      )),
     tracedCommand("deploy")
   ))

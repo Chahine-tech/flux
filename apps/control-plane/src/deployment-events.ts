@@ -1,4 +1,4 @@
-import { Clock, Context, Duration, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule, Stream } from "effect"
+import { Cause, Clock, Context, Duration, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule, Stream } from "effect"
 import type { DeploymentState } from "@flux/contracts"
 import { TemporalClient } from "./temporal-client.ts"
 
@@ -105,31 +105,36 @@ export const layer = (
 
       /**
        * `status` for a single deployment, with anything that goes wrong turned
-       * into `None` rather than propagated.
+       * into `None` rather than propagated: one unreadable deployment must not
+       * cost every other deployment in the tick its delta, which is what used
+       * to happen.
        *
-       * `Effect.option` alone is not enough, and that gap is what turned one
-       * bad deployment into a dead tick. `temporal-client.ts` declares `status`
-       * as failing only with `DeploymentNotFound`, but its `catch` re-throws
-       * anything it cannot classify, and a throw inside `tryPromise`'s `catch`
-       * becomes a defect. So a transient Temporal error (a worker restarting
-       * makes the query unanswerable: `FAILED_PRECONDITION: no poller seen for
-       * task queue recently`) escaped the guard and aborted the whole tick,
-       * losing every other deployment's delta with it.
-       *
-       * `catchCause` covers failures and defects alike. The port's error type
-       * is still optimistic, which is a separate decision about the contract's
-       * error surface; this makes the poller not depend on it being right.
+       * `catchCause` rather than `Effect.option`, and the difference is no
+       * longer about the port lying. Its errors are typed now, so `option`
+       * would be enough for anything Temporal can do. This still contains a
+       * *defect*, because a bug in decoding one deployment taking down every
+       * watcher is the worse outcome, but it logs one at error level rather
+       * than swallowing it. A contained bug that nobody can see is how the
+       * first version of this got written.
        */
       const statusOrNone = (workflowId: string) =>
         temporal.status(workflowId).pipe(
           Effect.map(Option.some),
-          Effect.catchCause(() => Effect.succeed(Option.none<DeploymentState>()))
+          Effect.catchCause((cause) =>
+            Effect.as(
+              Cause.hasDies(cause)
+                ? Effect.logError("bug reading a deployment's status", cause).pipe(
+                  Effect.annotateLogs({ workflowId })
+                )
+                : Effect.void,
+              Option.none<DeploymentState>()
+            ))
         )
 
       // One poll: publish a delta for every running deployment whose state
       // changed (or is newly seen), then release the slot of any deployment that
       // was running and has now finished.
-      const tick = Effect.gen(function*() {
+      const publishDeltas = Effect.gen(function*() {
         const runningIds = yield* temporal.listRunningIds(config.maxTracked)
         const runningSet = new Set(runningIds)
         const previous = yield* Ref.get(lastSeen)
@@ -171,7 +176,27 @@ export const layer = (
         }
 
         yield* Ref.set(lastSeen, next)
+      })
 
+      /**
+       * Deltas and reconciliation fail independently, and that separation is
+       * the practical payoff of the port no longer hiding its errors behind
+       * defects. Listing running deployments goes through Temporal's
+       * *visibility index*, while reconciling asks `describe`, which reads
+       * history directly. A degraded index is the common shape of a Temporal
+       * outage, and it is exactly the case where reconciliation must keep
+       * running: the deltas are only a stream going quiet for a few seconds,
+       * whereas a slot not released is a service blocked. While the two shared
+       * one `Effect.gen`, a visibility failure took the safety net down with
+       * the thing it was there to catch.
+       */
+      const tick = Effect.gen(function*() {
+        yield* publishDeltas.pipe(
+          Effect.catchTag("TemporalUnavailable", (error) =>
+            Effect.logWarning("visibility unavailable, no deployment deltas this tick").pipe(
+              Effect.annotateLogs({ operation: error.operation, detail: error.detail })
+            ))
+        )
         yield* reconcile()
       })
 

@@ -2,7 +2,7 @@ import { describe, it } from "@effect/vitest"
 import type { Duration } from "effect"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import type { DeploymentState } from "@flux/contracts"
+import { type DeploymentState, temporalUnavailable } from "@flux/contracts"
 import { expect } from "vitest"
 import * as Admission from "../src/admission.ts"
 import { DeploymentEvents, keepMonotonic, layer } from "../src/deployment-events.ts"
@@ -283,6 +283,7 @@ describe("deployment events poller", () => {
 const admissionSetup = (options?: { readonly unownedGrace?: Duration.Input }) => {
   let running: Array<string> = []
   let throwOnStatus = false
+  let visibilityDown = false
   const executions = new Map<string, "open" | "closed" | "missing" | "unknown">()
 
   const FakeTemporal = Layer.succeed(TemporalClient, {
@@ -294,7 +295,10 @@ const admissionSetup = (options?: { readonly unownedGrace?: Duration.Input }) =>
         return state(10)
       }),
     list: () => Effect.succeed([]),
-    listRunningIds: () => Effect.sync(() => running),
+    listRunningIds: () =>
+      visibilityDown
+        ? Effect.fail(temporalUnavailable("listRunningIds", new Error("visibility store unavailable")))
+        : Effect.sync(() => running),
     listClosed: () => Effect.succeed([]),
     approve: () => Effect.void,
     abort: () => Effect.void,
@@ -327,6 +331,7 @@ const admissionSetup = (options?: { readonly unownedGrace?: Duration.Input }) =>
     Live: Layer.provideMerge(EventsLive, AdmissionLive),
     setRunning: (ids: Array<string>) => (running = ids),
     breakStatus: (broken: boolean) => (throwOnStatus = broken),
+    breakVisibility: (broken: boolean) => (visibilityDown = broken),
     setExecution: (workflowId: string, value: "open" | "closed" | "missing" | "unknown") =>
       executions.set(workflowId, value)
   }
@@ -483,5 +488,47 @@ describe("a tick survives one unreadable deployment", () => {
       yield* TestClock.adjust("6 seconds")
       expect(seen).toEqual(["healthy"])
     }).pipe(Effect.provide(EventsLive))
+  })
+})
+
+describe("a visibility outage", () => {
+  it.effect("still reconciles admission slots while deltas are unavailable", () => {
+    // The two halves of a tick reach Temporal through different subsystems:
+    // listing running deployments queries the visibility index, reconciling
+    // asks `describe`, which reads history. A degraded index is the common
+    // shape of an outage, and it is precisely when reconciliation must keep
+    // working: a quiet stream costs a few seconds of updates, a slot never
+    // released blocks a service until the process restarts.
+    const h = admissionSetup()
+    return Effect.gen(function*() {
+      const admission = yield* Admission.AdmissionController
+      yield* admission.admit("api")
+      yield* admission.bind(["api"], "wf1")
+      h.setExecution("wf1", "closed")
+      h.breakVisibility(true)
+
+      yield* TestClock.adjust("6 seconds")
+      expect(yield* canDeployAgain("api")).toBe(true)
+    }).pipe(Effect.provide(h.Live))
+  })
+
+  it.effect("keeps polling after one", () => {
+    const h = admissionSetup()
+    return Effect.gen(function*() {
+      const admission = yield* Admission.AdmissionController
+      yield* admission.admit("api")
+      yield* admission.bind(["api"], "wf1")
+      h.setExecution("wf1", "open")
+
+      // Down for two ticks, then back. A failing tick must not end the loop.
+      h.breakVisibility(true)
+      yield* TestClock.adjust("6 seconds")
+      yield* TestClock.adjust("6 seconds")
+      h.breakVisibility(false)
+      h.setExecution("wf1", "closed")
+      yield* TestClock.adjust("6 seconds")
+
+      expect(yield* canDeployAgain("api")).toBe(true)
+    }).pipe(Effect.provide(h.Live))
   })
 })

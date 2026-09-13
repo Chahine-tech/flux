@@ -44,4 +44,12 @@ export const drift = Command.make("drift", {
       payload: { service: config.service, version, everyMs: Duration.toMillis(every) }
     })
     yield* Console.log(`[flux] drift detection on for ${config.service}@${version} — schedule ${scheduleId}`)
-  }).pipe(Effect.provide(clientLayer), tracedCommand("drift")))
+  }).pipe(
+    Effect.provide(clientLayer),
+    Effect.catchTag("TemporalUnavailable", (error) =>
+      Console.error(
+        `[flux] the control plane could not reach Temporal (${error.operation}): ${error.detail}` +
+          ", nothing was started, retry when it is back"
+      )),
+    tracedCommand("drift")
+  ))

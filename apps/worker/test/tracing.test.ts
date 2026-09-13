@@ -101,8 +101,9 @@ describe("traceparent propagation", () => {
     try {
       const workflowId = `tracing-${Date.now()}`
       await worker.runUntil(async () => {
-        const program = withClientTraceContext(() =>
-          client.workflow.start("deploymentWorkflow", { taskQueue: TASK_QUEUE, workflowId, args: [input] })
+        const program = withClientTraceContext(
+          () => client.workflow.start("deploymentWorkflow", { taskQueue: TASK_QUEUE, workflowId, args: [input] }),
+          (error) => new Error(String(error))
         ).pipe(Effect.withSpan("test.startDeployment"))
         await Effect.runPromise(program)
         await client.workflow.getHandle(workflowId).result()

@@ -38,6 +38,31 @@ export class DeploymentNotFound extends Schema.TaggedError<DeploymentNotFound>()
   { httpApiStatus: 404 }
 ) {}
 
+/**
+ * flux could not reach Temporal, or Temporal could not answer.
+ *
+ * 503 rather than 500: the request is well-formed and the client should retry,
+ * nothing is wrong with it. And a typed error rather than an empty result,
+ * which is the decision D41 parked and D48 forced. `GET /deployments` returning
+ * `[]` during a visibility outage cannot be told apart from "nothing is
+ * running", and the CLI prints "no deployments yet" for both, so an outage
+ * would read as a quiet, confident lie. Saying nothing is not an option a read
+ * endpoint has.
+ *
+ * `operation` names the call that failed, because "Temporal is unavailable" is
+ * not actionable when visibility is degraded but the cluster is otherwise fine,
+ * which is the common shape of this outage.
+ */
+export class TemporalUnavailable extends Schema.TaggedError<TemporalUnavailable>()(
+  "TemporalUnavailable",
+  { operation: Schema.String, detail: Schema.String },
+  { httpApiStatus: 503 }
+) {}
+
+/** Build one from whatever the gRPC layer threw. */
+export const temporalUnavailable = (operation: string, error: unknown): TemporalUnavailable =>
+  new TemporalUnavailable({ operation, detail: error instanceof Error ? error.message : String(error) })
+
 /** The action is invalid in the deployment's current state (e.g. approving one that isn't awaiting approval). */
 export class DeploymentNotActionable extends Schema.TaggedError<DeploymentNotActionable>()(
   "DeploymentNotActionable",
@@ -85,7 +110,7 @@ const deployments = HttpApiGroup.make("deployments")
     HttpApiEndpoint.post("trigger", "/deployments", {
       payload: TriggerDeploymentRequest,
       success: TriggerDeploymentResponse,
-      error: [DeploymentBudgetExhausted, ServiceAlreadyDeploying, OutsideDeploymentWindow]
+      error: [DeploymentBudgetExhausted, ServiceAlreadyDeploying, OutsideDeploymentWindow, TemporalUnavailable]
     })
   )
   .add(
@@ -94,19 +119,21 @@ const deployments = HttpApiGroup.make("deployments")
       success: TriggerDeploymentResponse,
       // A rollout is admitted as a unit, so it can be refused for the same two
       // reasons a single deployment can.
-      error: [InvalidRolloutPlan, DeploymentBudgetExhausted, ServiceAlreadyDeploying]
+      error: [InvalidRolloutPlan, DeploymentBudgetExhausted, ServiceAlreadyDeploying, TemporalUnavailable]
     })
   )
   .add(
     HttpApiEndpoint.post("enableDrift", "/drift", {
       payload: EnableDriftRequest,
-      success: EnableDriftResponse
+      success: EnableDriftResponse,
+      error: TemporalUnavailable
     })
   )
   .add(
     // Idempotent — disabling drift for a service that has none is a 204 too.
     HttpApiEndpoint.delete("disableDrift", "/drift/:service", {
-      params: { service: Schema.String }
+      params: { service: Schema.String },
+      error: TemporalUnavailable
     })
   )
   .add(
@@ -115,26 +142,27 @@ const deployments = HttpApiGroup.make("deployments")
         service: Schema.optional(Schema.String),
         limit: Schema.optional(Schema.FiniteFromString)
       },
-      success: Schema.Array(DeploymentSummary)
+      success: Schema.Array(DeploymentSummary),
+      error: TemporalUnavailable
     })
   )
   .add(
     HttpApiEndpoint.get("status", "/deployments/:workflowId", {
       params: WorkflowIdParam,
       success: DeploymentState,
-      error: DeploymentNotFound
+      error: [DeploymentNotFound, TemporalUnavailable]
     })
   )
   .add(
     HttpApiEndpoint.post("approve", "/deployments/:workflowId/approve", {
       params: WorkflowIdParam,
-      error: [DeploymentNotFound, DeploymentNotActionable]
+      error: [DeploymentNotFound, DeploymentNotActionable, TemporalUnavailable]
     })
   )
   .add(
     HttpApiEndpoint.post("abort", "/deployments/:workflowId/abort", {
       params: WorkflowIdParam,
-      error: DeploymentNotFound
+      error: [DeploymentNotFound, TemporalUnavailable]
     })
   )
 

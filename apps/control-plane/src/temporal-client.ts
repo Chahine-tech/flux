@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect"
-import { DeploymentNotActionable, DeploymentNotFound } from "@flux/contracts"
+import { DeploymentNotActionable, DeploymentNotFound, temporalUnavailable, TemporalUnavailable } from "@flux/contracts"
 import type { DeploymentState, DeploymentSummary, TriggerDeploymentRequest, TriggerMultiRequest } from "@flux/contracts"
 import type { DeploymentInput, MultiServiceInput } from "@flux/orchestration"
 import { makePayloadCodec, SEARCH_ATTRIBUTES, traceparentClientInterceptor, withClientTraceContext } from "@flux/orchestration"
@@ -16,13 +16,22 @@ import { deleteDriftSchedule, ensureDriftSchedule as ensureDriftScheduleImpl } f
  * and the pollers reach the cluster. Temporal's client is Promise-based, so
  * every method is wrapped in an Effect and its Promise rejections are classified
  * into the API's typed errors, keeping the callers pure.
+ *
+ * **Every method that talks to the cluster can fail with `TemporalUnavailable`,
+ * and that used to be a lie by omission.** The read methods wrapped gRPC in
+ * `Effect.promise`, whose rejections become *defects*, and `status` used a
+ * `catch` that re-threw anything it could not classify, which is a defect too.
+ * Neither showed up in a signature, so callers wrote guards against the errors
+ * the types admitted and were taken down by the ones they did not (D41's fourth
+ * finding, and the mechanism behind D48's admission leak). The types now say
+ * what can actually happen, which is the point of having them.
  */
 export class TemporalClient extends Context.Service<TemporalClient, {
-  readonly start: (request: TriggerDeploymentRequest) => Effect.Effect<string>
+  readonly start: (request: TriggerDeploymentRequest) => Effect.Effect<string, TemporalUnavailable>
   /** Start a multi-service rollout (a parent workflow over one child per service). */
   /** Takes the already-compiled input: the dependency plan is resolved by the handler, not here. */
-  readonly startMulti: (input: MultiServiceInput) => Effect.Effect<string>
-  readonly status: (workflowId: string) => Effect.Effect<DeploymentState, DeploymentNotFound>
+  readonly startMulti: (input: MultiServiceInput) => Effect.Effect<string, TemporalUnavailable>
+  readonly status: (workflowId: string) => Effect.Effect<DeploymentState, DeploymentNotFound | TemporalUnavailable>
   /**
    * Whether a workflow is still open, for reconciling admission slots.
    *
@@ -50,23 +59,23 @@ export class TemporalClient extends Context.Service<TemporalClient, {
   readonly list: (
     service: string | undefined,
     limit: number
-  ) => Effect.Effect<ReadonlyArray<DeploymentSummary>>
+  ) => Effect.Effect<ReadonlyArray<DeploymentSummary>, TemporalUnavailable>
   /** Ids of the currently-running deployments — the set the poller tracks. */
-  readonly listRunningIds: (limit: number) => Effect.Effect<ReadonlyArray<string>>
+  readonly listRunningIds: (limit: number) => Effect.Effect<ReadonlyArray<string>, TemporalUnavailable>
   /** Closed deployments with their business outcome and duration — projected into the read model. */
-  readonly listClosed: (limit: number) => Effect.Effect<ReadonlyArray<ClosedDeployment>>
+  readonly listClosed: (limit: number) => Effect.Effect<ReadonlyArray<ClosedDeployment>, TemporalUnavailable>
   readonly approve: (
     workflowId: string
-  ) => Effect.Effect<void, DeploymentNotFound | DeploymentNotActionable>
-  readonly abort: (workflowId: string) => Effect.Effect<void, DeploymentNotFound>
+  ) => Effect.Effect<void, DeploymentNotFound | DeploymentNotActionable | TemporalUnavailable>
+  readonly abort: (workflowId: string) => Effect.Effect<void, DeploymentNotFound | TemporalUnavailable>
   /** Create/update the drift-check Schedule for a service; returns its id. */
   readonly ensureDriftSchedule: (
     service: string,
     version: string,
     everyMs: number
-  ) => Effect.Effect<string>
+  ) => Effect.Effect<string, TemporalUnavailable>
   /** Delete the service's drift-check Schedule (idempotent). */
-  readonly disableDrift: (service: string) => Effect.Effect<void>
+  readonly disableDrift: (service: string) => Effect.Effect<void, TemporalUnavailable>
 }>()("TemporalClient") {}
 
 const TASK_QUEUE = "flux-deployments"
@@ -115,7 +124,7 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           args: [request as DeploymentInput]
         })
         return workflowId
-      }),
+      }, (error) => unavailable("start", error)),
 
     startMulti: (input) =>
       withClientTraceContext(async () => {
@@ -126,7 +135,7 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           args: [input]
         })
         return workflowId
-      }),
+      }, (error) => unavailable("startMulti", error)),
 
     status: (workflowId) =>
       Effect.tryPromise({
@@ -158,7 +167,8 @@ export const make = (client: Client): typeof TemporalClient.Service => {
     }).pipe(Effect.catchCause(() => Effect.succeed(false))),
 
     list: (service, limit) =>
-      Effect.promise(async () => {
+      Effect.tryPromise({
+        try: async () => {
         const filter = service === undefined || service === ""
           ? ""
           : ` AND ${SEARCH_ATTRIBUTES.service} = '${service}'`
@@ -173,10 +183,13 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           if (summaries.length >= limit) break
         }
         return summaries
+        },
+        catch: (error) => unavailable("list", error)
       }),
 
     listRunningIds: (limit) =>
-      Effect.promise(async () => {
+      Effect.tryPromise({
+        try: async () => {
         const query = `WorkflowType = '${WORKFLOW_TYPE}' AND ExecutionStatus = 'Running'`
         const ids: Array<string> = []
         for await (const execution of client.workflow.list({ query })) {
@@ -184,10 +197,13 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           if (ids.length >= limit) break
         }
         return ids
+        },
+        catch: (error) => unavailable("listRunningIds", error)
       }),
 
     listClosed: (limit) =>
-      Effect.promise(async () => {
+      Effect.tryPromise({
+        try: async () => {
         // flux workflows always complete normally (they return a result even on
         // rollback/failure); the business outcome lives in FluxStatus.
         const query = `WorkflowType = '${WORKFLOW_TYPE}' AND ExecutionStatus = 'Completed'`
@@ -205,6 +221,8 @@ export const make = (client: Client): typeof TemporalClient.Service => {
           if (closed.length >= limit) break
         }
         return closed
+        },
+        catch: (error) => unavailable("listClosed", error)
       }),
 
     approve: (workflowId) =>
@@ -263,23 +281,30 @@ export const layerFromClient = (client: Client): Layer.Layer<TemporalClient> =>
   Layer.succeed(TemporalClient, make(client))
 
 /** Missing workflow → 404; anything else is an unexpected defect (Effect dies). */
-const classifyNotFound = (error: unknown, workflowId: string): DeploymentNotFound => {
-  if (error instanceof WorkflowNotFoundError) {
-    return new DeploymentNotFound({ workflowId })
-  }
-  throw error
-}
+/**
+ * Anything that is not a missing workflow is the cluster being unable to
+ * answer. This used to `throw` instead, which turned a Temporal outage into a
+ * defect: invisible in the signature, and straight through every caller's
+ * guard. Returning it keeps it in the error channel where callers can see it.
+ */
+const classifyNotFound = (error: unknown, workflowId: string): DeploymentNotFound | TemporalUnavailable =>
+  error instanceof WorkflowNotFoundError
+    ? new DeploymentNotFound({ workflowId })
+    : unavailable("status", error)
+
+/** Every gRPC failure that is not a business outcome looks the same to a caller. */
+const unavailable = temporalUnavailable
 
 /** Update rejected by its validator → 409 (not actionable now); missing → 404. */
 const classifyUpdate = (
   error: unknown,
   workflowId: string
-): DeploymentNotFound | DeploymentNotActionable => {
+): DeploymentNotFound | DeploymentNotActionable | TemporalUnavailable => {
   if (error instanceof WorkflowNotFoundError) {
     return new DeploymentNotFound({ workflowId })
   }
   if (error instanceof WorkflowUpdateFailedError) {
     return new DeploymentNotActionable({ workflowId, reason: error.message })
   }
-  throw error
+  return unavailable("update", error)
 }

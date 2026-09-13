@@ -1,3 +1,4 @@
+import { type TemporalUnavailable, temporalUnavailable } from "@flux/contracts"
 import { Effect } from "effect"
 import type { DriftCheckInput } from "@flux/orchestration"
 import type { Client } from "@temporalio/client"
@@ -24,8 +25,12 @@ export const driftScheduleId = (service: string): string => `flux-drift-${servic
  * interval if it already exists — idempotent, so it is safe to call on every
  * successful deployment.
  */
-export const ensureDriftSchedule = (client: Client, options: DriftScheduleOptions): Effect.Effect<string> =>
-  Effect.promise(async () => {
+export const ensureDriftSchedule = (
+  client: Client,
+  options: DriftScheduleOptions
+): Effect.Effect<string, TemporalUnavailable> =>
+  Effect.tryPromise({
+    try: async () => {
     const scheduleId = driftScheduleId(options.desired.service)
     const spec = { intervals: [{ every: `${options.everyMs}ms` }] }
     const action = {
@@ -41,7 +46,9 @@ export const ensureDriftSchedule = (client: Client, options: DriftScheduleOption
       // Already exists → keep the desired state and interval current.
       await client.schedule.getHandle(scheduleId).update((previous) => ({ ...previous, spec, action }))
     }
-    return scheduleId
+      return scheduleId
+    },
+    catch: (error) => temporalUnavailable("ensureDriftSchedule", error)
   })
 
 /**
@@ -49,11 +56,14 @@ export const ensureDriftSchedule = (client: Client, options: DriftScheduleOption
  * schedule that does not exist is a no-op, so drift can be switched off safely
  * at any time.
  */
-export const deleteDriftSchedule = (client: Client, service: string): Effect.Effect<void> =>
-  Effect.promise(async () => {
-    try {
-      await client.schedule.getHandle(driftScheduleId(service)).delete()
-    } catch {
-      // Not found → already off.
-    }
+export const deleteDriftSchedule = (client: Client, service: string): Effect.Effect<void, TemporalUnavailable> =>
+  Effect.tryPromise({
+    try: async () => {
+      try {
+        await client.schedule.getHandle(driftScheduleId(service)).delete()
+      } catch {
+        // Not found → already off.
+      }
+    },
+    catch: (error) => temporalUnavailable("disableDrift", error)
   })

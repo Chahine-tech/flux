@@ -1,7 +1,7 @@
 import { Effect, Layer, Option, Redacted } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Authorization, DeploymentNotFound, FluxApi } from "@flux/contracts"
+import { Authorization, DeploymentNotFound, FluxApi, temporalUnavailable } from "@flux/contracts"
 import type { ServiceStats } from "@flux/contracts"
 import type { MultiServiceInput } from "@flux/orchestration"
 import { afterAll, describe, expect, it } from "vitest"
@@ -82,6 +82,35 @@ const makeApp = (auth: Layer.Layer<Authorization>) =>
     Layer.provide(HttpServer.layerServices)
   )
 
+// A second Temporal whose cluster is unreachable, for the 503 assertions. It is
+// a *typed* failure, which is the decision under test: these calls used to wrap
+// gRPC in `Effect.promise`, so an outage was a defect and the API answered 500
+// with nothing a client could read.
+const OutageTemporal = Layer.succeed(TemporalClient, {
+  start: () => Effect.fail(temporalUnavailable("start", new Error("connection refused"))),
+  startMulti: () => Effect.fail(temporalUnavailable("startMulti", new Error("connection refused"))),
+  status: () => Effect.fail(temporalUnavailable("status", new Error("connection refused"))),
+  list: () => Effect.fail(temporalUnavailable("list", new Error("visibility store unavailable"))),
+  listRunningIds: () => Effect.fail(temporalUnavailable("listRunningIds", new Error("down"))),
+  listClosed: () => Effect.fail(temporalUnavailable("listClosed", new Error("down"))),
+  approve: () => Effect.fail(temporalUnavailable("approve", new Error("down"))),
+  abort: () => Effect.fail(temporalUnavailable("abort", new Error("down"))),
+  ensureDriftSchedule: () => Effect.fail(temporalUnavailable("ensureDriftSchedule", new Error("down"))),
+  disableDrift: () => Effect.fail(temporalUnavailable("disableDrift", new Error("down"))),
+  reachable: Effect.succeed(false),
+  execution: () => Effect.succeed("unknown" as const)
+})
+
+const outage = HttpRouter.toWebHandler(
+  HttpApiBuilder.layer(FluxApi).pipe(
+    Layer.provide(DeploymentsHandlers),
+    Layer.provide(StatsHandlers),
+    Layer.provide(Auth.layer(Option.none())),
+    HttpRouter.provideRequest(Layer.mergeAll(OutageTemporal, MockReadModel, Admission.layer(100))),
+    Layer.provide(HttpServer.layerServices)
+  )
+)
+
 // Main app: auth disabled (no token configured), as in local dev.
 const { dispose, handler } = HttpRouter.toWebHandler(makeApp(Auth.layer(Option.none())))
 // Second app with a configured token, for the 401/200 auth tests.
@@ -89,6 +118,7 @@ const authed = HttpRouter.toWebHandler(makeApp(Auth.layer(Option.some(Redacted.m
 afterAll(async () => {
   await dispose()
   await authed.dispose()
+  await outage.dispose()
 })
 
 const url = (path: string) => `http://localhost${path}`
@@ -297,5 +327,55 @@ describe("control plane HTTP API", () => {
       new Request(url("/deployments"), { headers: { authorization: "Bearer s3cret" } })
     )
     expect(res.status).toBe(200)
+  })
+})
+
+describe("when Temporal cannot answer", () => {
+  const get = (path: string) => outage.handler(new Request(url(path)))
+
+  it("answers GET /deployments with 503 rather than an empty list", async () => {
+    // The decision this whole error type exists for. `[]` is indistinguishable
+    // from "nothing is running", and the CLI prints "no deployments yet" for
+    // both, so an outage would read as a quiet, confident lie.
+    const res = await get("/deployments")
+    expect(res.status).toBe(503)
+    const body = await res.json() as { readonly _tag: string; readonly operation: string }
+    expect(body._tag).toBe("TemporalUnavailable")
+    // Named, because "Temporal is unavailable" is not actionable when the
+    // visibility index is degraded and the rest of the cluster is fine.
+    expect(body.operation).toBe("list")
+  })
+
+  it("answers a status read with 503, not the 404 that means the deployment is gone", async () => {
+    // The distinction that matters to a caller: 404 is an answer about the
+    // deployment, 503 is an admission that there is no answer. Collapsing them
+    // would tell a client its deployment had vanished.
+    const res = await get("/deployments/known")
+    expect(res.status).toBe(503)
+    expect((await res.json() as { readonly _tag: string })._tag).toBe("TemporalUnavailable")
+  })
+
+  it("refuses a deployment with 503 instead of accepting one it cannot start", async () => {
+    const res = await outage.handler(
+      new Request(url("/deployments"), {
+        method: "POST",
+        body: JSON.stringify(validTrigger),
+        headers: { "content-type": "application/json" }
+      })
+    )
+    expect(res.status).toBe(503)
+
+    // And it gives the slot back. `Effect.onError` releases on failure, but
+    // that used to be reached by a *defect* rather than a typed error, so this
+    // pins the path that changed: an outage must not cost the service its
+    // ability to deploy once Temporal is back.
+    const second = await outage.handler(
+      new Request(url("/deployments"), {
+        method: "POST",
+        body: JSON.stringify(validTrigger),
+        headers: { "content-type": "application/json" }
+      })
+    )
+    expect(second.status, "not 409 ServiceAlreadyDeploying").toBe(503)
   })
 })

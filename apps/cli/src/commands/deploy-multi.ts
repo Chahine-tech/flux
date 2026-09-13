@@ -66,4 +66,12 @@ export const deployMulti = Command.make("deploy-multi", {
       `[flux] started multi-service rollout ${workflowId} — ${request.services.length} services` +
         ` (max ${request.maxConcurrency} at once, fail-fast ${request.failFast})`
     )
-  }).pipe(Effect.provide(clientLayer), tracedCommand("deploy-multi")))
+  }).pipe(
+    Effect.provide(clientLayer),
+    Effect.catchTag("TemporalUnavailable", (error) =>
+      Console.error(
+        `[flux] the control plane could not reach Temporal (${error.operation}): ${error.detail}` +
+          ", nothing was started, retry when it is back"
+      )),
+    tracedCommand("deploy-multi")
+  ))
