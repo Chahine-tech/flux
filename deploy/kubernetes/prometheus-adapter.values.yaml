@@ -1,0 +1,35 @@
+# The last step of three the chart has named since D46 for giving the worker's
+# HPA a metric that moves. flux publishes `flux_task_queue_backlog` (D62),
+# Prometheus collects it (D59), and an HPA still cannot read it: nothing in
+# Kubernetes bridges the metrics API to a Prometheus query. This is that bridge.
+#
+# Installed with Helm rather than added to `deps/`, because the adapter needs an
+# APIService with its own serving certificate and the RBAC to be aggregated into
+# the API server. Hand-written YAML for that would be a large file nobody reads.
+
+# The lab's Prometheus, which is also this chart's default.
+prometheus:
+  url: http://prometheus.default.svc
+  port: 9090
+
+rules:
+  # The stock rules expose every container CPU and memory series as a custom
+  # metric. None of that is the question here, and leaving it on would make the
+  # metrics API a haystack with one needle in it.
+  default: false
+
+  external:
+    # An *external* metric, not a Pods one, and the difference decides whether
+    # the arithmetic is right. A Pods metric is summed across pods and divided
+    # by the target, but every worker reports the same queue depth, so the sum
+    # grows with the replica count and the HPA chases its own tail. An external
+    # metric with `averageValue` computes `ceil(value / target)`, which is what
+    # queue-depth autoscaling means.
+    #
+    # `max` for the same reason, and it is the aggregation D62 wrote into the
+    # metric's own description: the series are replicas of one value, so summing
+    # multiplies the backlog by the number of workers.
+    - seriesQuery: '{__name__="flux_task_queue_backlog",taskQueue!=""}'
+      metricsQuery: max(<<.Series>>{<<.LabelMatchers>>}) by (taskQueue)
+      resources:
+        namespaced: false

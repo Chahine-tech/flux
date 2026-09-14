@@ -1,6 +1,14 @@
 import { createServer } from "node:http"
 import { NativeConnection, Runtime, Worker } from "@temporalio/worker"
-import { activityInterceptors, createActivities, makePayloadCodec, metricsPrometheusText } from "@flux/orchestration"
+import { Connection } from "@temporalio/client"
+import {
+  activityInterceptors,
+  createActivities,
+  makePayloadCodec,
+  metricsPrometheusText,
+  recordTaskQueue,
+  taskQueueBacklog
+} from "@flux/orchestration"
 import { Effect, type ManagedRuntime } from "effect"
 import type { AppServices } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
@@ -44,10 +52,27 @@ const main = async (): Promise<void> => {
   // From here the SDK's own logs and every workflow's `log.*` arrive in
   // Effect's logger, correlated with the activity logs of the same deployment
   // instead of going out to stderr on their own.
-  Runtime.install({ logger: effectLogger(runtime) })
+  // The SDK core's own metrics, which are the only place a worker's *slots* are
+  // visible: `WorkerStatus` reports what is in flight, never what the tuner is
+  // currently willing to admit. `temporal_worker_task_slots_available` is the
+  // number that says whether the resource tuner (D18) is actually limiting, and
+  // it can be read without generating any load at all.
+  //
+  // Gated, because it binds a second HTTP listener, and off by default.
+  const sdkMetricsPort = process.env.TEMPORAL_METRICS_PORT
+  Runtime.install({
+    logger: effectLogger(runtime),
+    ...(sdkMetricsPort === undefined ? {} : {
+      telemetryOptions: { metrics: { prometheus: { bindAddress: `0.0.0.0:${sdkMetricsPort}` } } }
+    })
+  })
   const metricsServer = startMetricsServer(runtime)
   await ensureSearchAttributes((message) => runtime.runFork(Effect.logInfo(message)), address, namespace)
   const connection = await NativeConnection.connect({ address })
+  // A second, client-side connection: `NativeConnection` drives the worker and
+  // exposes no `workflowService`, and DescribeTaskQueue is not on the
+  // high-level client either.
+  const queueClient = await Connection.connect({ address })
 
   try {
     const workerDeploymentOptions = versioningOptions()
@@ -83,6 +108,23 @@ const main = async (): Promise<void> => {
       // decision the logger makes: it is not JSON where something is parsing,
       // it carries no annotations, and the span tree cannot place it, so it
       // lands in the middle of a drawing it is not part of.
+      // The queue's depth, read over the same DescribeTaskQueue gRPC the poller
+      // autoscaling already uses (D34), and published as a gauge. Step one of
+      // the three the chart has named since D46 for giving the HPA a metric
+      // that moves; D59 did step two by collecting it, and the remaining step
+      // is a custom-metrics adapter, which is Kubernetes' side rather than
+      // flux's.
+      //
+      // Failures are swallowed on purpose: a metric flux cannot read is not a
+      // reason to disturb a worker that is otherwise fine, and the gauge simply
+      // keeps its last value until the next tick.
+      runtime.runFork(
+        Effect.promise(() => taskQueueBacklog(queueClient.workflowService, { namespace, taskQueue: TASK_QUEUE }))
+          .pipe(
+            Effect.flatMap((reading) => recordTaskQueue(TASK_QUEUE, reading)),
+            Effect.catchCause(() => Effect.void)
+          )
+      )
       runtime.runFork(
         Effect.annotateLogs(Effect.logInfo("worker load"), {
           workflowPoller: status.workflowPollerState,
@@ -104,6 +146,7 @@ const main = async (): Promise<void> => {
     metricsServer.close()
     await runtime.dispose()
     await connection.close()
+    await queueClient.close()
   }
 }
 

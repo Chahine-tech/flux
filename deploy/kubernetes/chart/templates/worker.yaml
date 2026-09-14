@@ -73,6 +73,10 @@ spec:
             - name: FLUX_ENV
               value: {{ . | quote }}
             {{- end }}
+            {{- range $name, $value := .Values.worker.extraEnv }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
             # The canary's target, not this pod's own health.
             - name: HEALTH_URL
               value: {{ .Values.health.url | quote }}
@@ -123,11 +127,16 @@ spec:
     {{- if .Values.worker.autoscaling.metrics }}
     {{- toYaml .Values.worker.autoscaling.metrics | nindent 4 }}
     {{- else }}
-    # CPU because it needs nothing installed. The metric that actually fits a
-    # Temporal worker is the task-queue backlog, which flux already reads over
-    # raw gRPC (D34), but reaching an HPA takes three steps flux has not
-    # taken: publish it as a gauge on /metrics, scrape it, and expose it
-    # through a custom-metrics adapter. Override `metrics` once they exist.
+    # Still CPU, and now for one reason rather than three. The metric that
+    # fits a Temporal worker is the task-queue backlog: flux publishes it as
+    # `flux_task_queue_backlog` (D61) and Prometheus collects it (D59). What is
+    # left is Kubernetes' half, a custom-metrics adapter, without which an HPA
+    # cannot read anything Prometheus holds. Measured meanwhile: CPU sits at 6%
+    # against this 70% target while a burst of six deployments drives the
+    # backlog to 5, so this target is plumbing and that one is the signal.
+    #
+    # Aggregate the backlog with `max`, never `sum`: every worker reports the
+    # same queue, so summing multiplies it by the replica count.
     - type: Resource
       resource:
         name: cpu

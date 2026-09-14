@@ -1,0 +1,26 @@
+# Point the worker's HPA at the queue instead of at CPU. Separate from the
+# chart's defaults on purpose: it only works where `prometheus-adapter` is
+# installed, and a chart that assumed it would fail anywhere else.
+#
+#   helm upgrade flux deploy/kubernetes/chart \
+#     -f deploy/kubernetes/backlog-autoscaling.values.yaml
+worker:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    metrics:
+      - type: External
+        external:
+          metric:
+            name: flux_task_queue_backlog
+            selector:
+              matchLabels:
+                taskQueue: flux-deployments
+          target:
+            # `ceil(backlog / 5)` workers: five queued tasks per worker is the
+            # tolerance. Not tuned against a working demonstration, because
+            # there has not been one: no burst this machine can produce has
+            # ever made the queue wait (D63, D65).
+            type: AverageValue
+            averageValue: "5"

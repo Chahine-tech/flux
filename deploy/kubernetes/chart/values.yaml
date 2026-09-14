@@ -19,6 +19,13 @@ temporal:
   namespace: default
 
 controlPlane:
+  # Anything else the control plane should be handed.
+  # `MAX_CONCURRENT_DEPLOYMENTS` is the one worth knowing about: it is the
+  # admission budget (D14), and at its default of 10 it caps the load well
+  # below what two workers hold, so the queue never builds and the backlog HPA
+  # can never fire (D63/D64). Raising it is the honest way to exercise
+  # autoscaling, rather than constraining the workers.
+  extraEnv: {}
   # Not configurable, and that is the finding rather than an omission (D40):
   # admission control is an in-memory STM budget and the read model is a local
   # SQLite file, so a second replica means a second budget, a second projection
@@ -42,6 +49,14 @@ worker:
   resources:
     requests: { cpu: 200m, memory: 256Mi }
     limits: { memory: 768Mi }
+  # Anything else the worker should be handed. `TEMPORAL_METRICS_PORT` is the
+  # one that earns its keep: it binds the SDK core's own Prometheus exporter,
+  # which is the only place a worker's *slots* are visible. `WorkerStatus`
+  # reports what is in flight, never what the resource tuner is currently
+  # willing to admit, and `temporal_resource_slots_mem_pid_output` is that
+  # decision rather than its consequence (D64).
+  extraEnv: {}
+
   podDisruptionBudget:
     enabled: true
     # A voluntary eviction during a canary is the interesting case, so keep one

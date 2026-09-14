@@ -71,6 +71,10 @@ spec:
             - name: FLUX_ENV
               value: {{ . | quote }}
             {{- end }}
+            {{- range $name, $value := .Values.controlPlane.extraEnv }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
           envFrom:
             - secretRef:
                 name: {{ .Release.Name }}-secrets

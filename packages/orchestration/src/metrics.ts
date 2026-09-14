@@ -21,6 +21,41 @@ export const recordOutcome = (outcome: string): Effect.Effect<void> =>
 /** Count one applied traffic-weight change. */
 export const recordTrafficShift: Effect.Effect<void> = Metric.update(trafficShiftsTotal, 1)
 
+/**
+ * The queue's pending work, and the pollers attached to it.
+ *
+ * This is the metric that actually fits a Temporal worker, and the chart has
+ * said so since D46 while running its HPA on CPU for want of it: a worker
+ * spends its life waiting on IO, so CPU never moves (measured at 6% against a
+ * 70% target in D58). Backlog does.
+ *
+ * **A gauge, and a queue-level one, which is the opposite of the counters
+ * above.** Every worker polls the same queue and reports the same number, so
+ * the series are replicas of one value rather than parts of a total.
+ * `sum(flux_task_queue_backlog)` multiplies the backlog by the number of
+ * workers, which is exactly wrong and looks plausible. `max` or `avg` is the
+ * honest aggregation. The counters are the other way round: each worker counts
+ * only its own work, so they have to be summed.
+ */
+export const taskQueueBacklogGauge = Metric.gauge("flux_task_queue_backlog", {
+  description: "Approximate tasks waiting on the queue (queue-level: aggregate with max, never sum)"
+})
+
+export const taskQueuePollersGauge = Metric.gauge("flux_task_queue_pollers", {
+  description: "Pollers currently attached to the queue (queue-level: aggregate with max, never sum)"
+})
+
+/** Publish one reading of the queue's depth. */
+export const recordTaskQueue = (
+  taskQueue: string,
+  reading: { readonly backlogCount: number; readonly pollerCount: number }
+): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    // `update` sets a gauge in v4; there is no `set`.
+    yield* Metric.update(Metric.withAttributes(taskQueueBacklogGauge, { taskQueue }), reading.backlogCount)
+    yield* Metric.update(Metric.withAttributes(taskQueuePollersGauge, { taskQueue }), reading.pollerCount)
+  })
+
 // --- Prometheus text exposition (format built by hand, no exporter dep) ---
 
 const promType = (type: Metric.Metric.Snapshot["type"]): string =>
