@@ -6,7 +6,7 @@
 A canary deployment tool. It moves traffic to a new version a step at a time,
 watches error rate and latency, and rolls back if they get worse. The
 orchestration is a Temporal workflow, so a crash or a long monitoring window
-doesn't lose it. It drives nginx or Caddy and reads Prometheus. No Kubernetes.
+doesn't lose it. It drives nginx or Caddy and reads Prometheus.
 
 [![Effect](https://img.shields.io/badge/Effect-4.0--rc-ff5faa.svg)](https://effect.website/)
 [![Temporal](https://img.shields.io/badge/Temporal-1.23-000000.svg)](https://temporal.io/)
@@ -188,13 +188,26 @@ traffic. It can also be deployed *onto* Kubernetes with the chart in
 than as a distribution: the question it answers is how a durable deployment
 system behaves when the orchestrator running it can evict its processes.
 
-A canary runs entirely in-cluster there, and the one experiment worth a cluster
+A canary runs entirely in-cluster there, and the experiment that justifies one
 is `apps/worker/test/kubernetes.test.ts`: delete the worker pod mid-monitor and
 the canary still completes. The recovery is not the heartbeat timeout the SIGKILL test provokes:
 a draining worker hands its activity task back to the queue and it is
 redelivered, with no failure recorded, which is faster.
 
+The cluster's other use is breaking things underneath flux and watching what it
+does. Prometheus blackholed mid-monitor turns out not to look like a breach, so
+a metrics outage does not roll a healthy version back; it did reveal that a hung
+dependency is invisible to an activity heartbeat, which is a concurrent daemon
+proving the process alive rather than the work progressing. Temporal scaled to
+zero takes the control plane out of the Service without restarting it, which is
+what the liveness and readiness split is for, and that is only observable from
+outside. Evicting a worker through the eviction API is refused by the disruption
+budget while a canary is running, and accepted once a replacement is ready.
+
 flux needs no RBAC rules to do any of it: it never touches the Kubernetes API.
+The same claim from the kernel's side is in the chart, which runs both
+deployments as uid 1000, drops every capability, and gives them a read-only root
+filesystem.
 
 ## Running it
 
