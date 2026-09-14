@@ -1,7 +1,7 @@
 import { createServer } from "node:http"
 import { NativeConnection, Runtime, Worker } from "@temporalio/worker"
 import { activityInterceptors, createActivities, makePayloadCodec, metricsPrometheusText } from "@flux/orchestration"
-import type { ManagedRuntime } from "effect"
+import { Effect, type ManagedRuntime } from "effect"
 import type { AppServices } from "@flux/orchestration"
 import { makeRuntime } from "./runtime.ts"
 import { effectLogger } from "./temporal-logger.ts"
@@ -30,7 +30,7 @@ const startMetricsServer = (runtime: ManagedRuntime.ManagedRuntime<AppServices, 
       () => res.writeHead(500).end()
     )
   })
-  server.listen(port, () => console.log(`[flux] metrics on http://localhost:${port}/metrics`))
+  server.listen(port, () => runtime.runFork(Effect.annotateLogs(Effect.logInfo("metrics served"), { port })))
   return server
 }
 
@@ -46,7 +46,7 @@ const main = async (): Promise<void> => {
   // instead of going out to stderr on their own.
   Runtime.install({ logger: effectLogger(runtime) })
   const metricsServer = startMetricsServer(runtime)
-  await ensureSearchAttributes(address, namespace)
+  await ensureSearchAttributes((message) => runtime.runFork(Effect.logInfo(message)), address, namespace)
   const connection = await NativeConnection.connect({ address })
 
   try {
@@ -79,14 +79,22 @@ const main = async (): Promise<void> => {
     const statusIntervalMs = Number(process.env.WORKER_STATUS_INTERVAL_MS ?? 30_000)
     const statusInterval = setInterval(() => {
       const status = worker.getStatus()
-      console.log(
-        `[flux] worker load — wf poller: ${status.workflowPollerState}, act poller: ${status.activityPollerState}, ` +
-          `in-flight wf: ${status.numInFlightWorkflowActivations}, act: ${status.numInFlightActivities}, ` +
-          `cached wf: ${status.numCachedWorkflows}`
+      // Through the logger, not `console.log`. A raw write bypasses every
+      // decision the logger makes: it is not JSON where something is parsing,
+      // it carries no annotations, and the span tree cannot place it, so it
+      // lands in the middle of a drawing it is not part of.
+      runtime.runFork(
+        Effect.annotateLogs(Effect.logInfo("worker load"), {
+          workflowPoller: status.workflowPollerState,
+          activityPoller: status.activityPollerState,
+          inFlightWorkflows: status.numInFlightWorkflowActivations,
+          inFlightActivities: status.numInFlightActivities,
+          cachedWorkflows: status.numCachedWorkflows
+        })
       )
     }, statusIntervalMs)
 
-    console.log(`[flux] worker listening on task queue "${TASK_QUEUE}"`)
+    runtime.runFork(Effect.annotateLogs(Effect.logInfo("worker listening"), { taskQueue: TASK_QUEUE }))
     try {
       await worker.run()
     } finally {

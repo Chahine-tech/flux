@@ -1,6 +1,14 @@
-# Prometheus for the lab. Deliberately minimal: it scrapes the demo exporter,
-# which is what a canary's threshold rules query. Scraping flux's own pods would
-# need service discovery and buys nothing for the question this tier asks.
+# Prometheus for the lab. It scrapes the demo exporter, which is what a canary's
+# threshold rules query, and flux's own workers, which had been exposing
+# `/metrics` since D34 with nobody collecting it.
+#
+# Pod discovery rather than a Service, and that is not a preference. A worker
+# has no Service by design (it polls, it does not serve), and adding a ClusterIP
+# just for metrics would be wrong anyway: it would round-robin between replicas,
+# so a scrape would land on whichever pod it felt like. Measured on two workers
+# after one canary, one reports `flux_traffic_shifts_total 2` and the other
+# reports nothing at all, because it did none of the work. Each pod is its own
+# series and queries sum across them.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -14,6 +22,58 @@ data:
       - job_name: demo-metrics
         static_configs:
           - targets: ["demo-metrics:9101"]
+
+      # Every pod that asks to be scraped, by the usual annotation convention,
+      # so nothing here needs to know what flux's deployments are called.
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          # The annotation names the port, because a pod can expose several and
+          # only one of them is metrics.
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            target_label: component
+---
+# Listing pods is a real permission, and it is worth noticing who needs one.
+# D46 found flux itself needs no RBAC at all, which is the "no Kubernetes"
+# claim seen from the permissions side. Its monitoring does: read-only, cluster
+# scope, and nothing beyond discovery.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: default
 ---
 apiVersion: v1
 kind: Service
@@ -43,6 +103,7 @@ spec:
     metadata:
       labels: { app: prometheus }
     spec:
+      serviceAccountName: prometheus
       containers:
         - name: prometheus
           image: prom/prometheus:v3.5.0

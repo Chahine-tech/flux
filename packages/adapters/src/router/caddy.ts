@@ -157,7 +157,20 @@ export const layer = (
           ? Effect.void
           : Effect.fail(new RouterUnavailable({ service, reason: `admin API HTTP ${response.status}` }))
 
+      // A span on the adapter, between the use case and the calls it makes.
+      // Without it the tree jumps straight from `flux.shiftTraffic` to two
+      // anonymous HTTP requests, and which port they belong to is a guess.
       const setTrafficWeight = (params: SetTrafficWeightParams): Effect.Effect<void, RouterUnavailable> =>
+        Effect.fn("CaddyRouter.setTrafficWeight")(function*() {
+          yield* Effect.annotateCurrentSpan({
+            "flux.service": params.service,
+            "flux.version": params.version,
+            "flux.weight": params.weight
+          })
+          return yield* inner(params)
+        })()
+
+      const inner = (params: SetTrafficWeightParams): Effect.Effect<void, RouterUnavailable> =>
         Effect.gen(function*() {
           const existing = yield* fetchRoute(params.service)
           const current = Object.fromEntries(
@@ -184,6 +197,12 @@ export const layer = (
         }).pipe(Effect.mapError(unavailable(params.service)))
 
       const readState = (service: string): Effect.Effect<ReadonlyArray<VersionWeight>, RouterUnavailable> =>
+        Effect.fn("CaddyRouter.readState")(function*() {
+          yield* Effect.annotateCurrentSpan({ "flux.service": service })
+          return yield* readStateInner(service)
+        })()
+
+      const readStateInner = (service: string): Effect.Effect<ReadonlyArray<VersionWeight>, RouterUnavailable> =>
         fetchRoute(service).pipe(
           Effect.map((route) => route === undefined ? [] : parseRoute(route, service, options.versionOf)),
           Effect.mapError(unavailable(service))

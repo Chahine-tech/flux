@@ -80,7 +80,7 @@ beforeAll(async () => {
     await setupConnection.close()
   }
 
-  await ensureSearchAttributes(address, PLATFORM_NAMESPACE)
+  await ensureSearchAttributes(() => {}, address, PLATFORM_NAMESPACE)
   workflowBundle = await bundleWorkflowCode({ workflowsPath })
 
   platformConnection = await NativeConnection.connect({ address })

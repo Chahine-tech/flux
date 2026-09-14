@@ -49,4 +49,20 @@ export const BoundedHttpClient = Layer.effect(
           )
       }))
   })
-).pipe(Layer.provide(NodeHttpClient.layerUndici))
+).pipe(
+  Layer.provide(NodeHttpClient.layerUndici),
+  // `http.client GET` three times in a row says the protocol and hides the
+  // point. The host is what tells Prometheus from Caddy at a glance, and
+  // Effect exposes the name as a context reference rather than making this a
+  // fork of the client.
+  //
+  // After the `provide`, not before: the reference has to end up in this
+  // layer's *output* so a request fiber can read it, and a `provide` applied
+  // afterwards keeps only its own output.
+  Layer.provideMerge(
+    Layer.succeed(HttpClient.SpanNameGenerator, (request) => {
+      const host = URL.parse(request.url)?.host
+      return host === undefined ? `http.client ${request.method}` : `http.client ${request.method} ${host}`
+    })
+  )
+)

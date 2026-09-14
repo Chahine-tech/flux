@@ -38,7 +38,7 @@ const dirs: Array<string> = []
 
 beforeAll(async () => {
   if (!REAL) return
-  await ensureSearchAttributes(address, namespace)
+  await ensureSearchAttributes(() => {}, address, namespace)
   client = new Client({ connection: await Connection.connect({ address }), namespace })
   nativeConnection = await NativeConnection.connect({ address })
 }, 120_000)

@@ -45,8 +45,14 @@ export const effectLogger = <A, E>(runtime: ManagedRuntime.ManagedRuntime<A, E>)
     const annotated = meta === undefined
       ? write(message)
       : Effect.annotateLogs(write(message), meta as Record<string, unknown>)
+    // `runFork`, not `runSync`. The first run on a `ManagedRuntime` builds its
+    // layer, which is asynchronous, so `runSync` throws `AsyncFiberError` until
+    // the runtime is warm. Here that was invisible: the `catch` below swallowed
+    // it, so the SDK's earliest log lines were dropped without a trace. In the
+    // metrics server's listen callback, where nothing caught it, it took the
+    // whole worker down.
     try {
-      runtime.runSync(annotated)
+      runtime.runFork(annotated)
     } catch {
       // A logger that can take the worker down is worse than a lost line.
     }

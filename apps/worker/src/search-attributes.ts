@@ -12,6 +12,7 @@ const KEYWORD = 2
  * than a separate manual step — the worker owns the attributes it needs.
  */
 export const ensureSearchAttributes = async (
+  log: (message: string) => void,
   address: string,
   namespace: string
 ): Promise<void> => {
@@ -25,7 +26,7 @@ export const ensureSearchAttributes = async (
         [SEARCH_ATTRIBUTES.status]: KEYWORD
       }
     })
-    console.log("[flux] search attributes registered")
+    log("search attributes registered")
   } catch (error) {
     // Already present → nothing to do. Anything else is logged but non-fatal.
     const message = error instanceof Error ? error.message : String(error)

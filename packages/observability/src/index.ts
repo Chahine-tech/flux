@@ -1,5 +1,6 @@
 import { Context, type Duration, type Fiber, Layer, Logger, Option, Tracer } from "effect"
 import { Otlp } from "effect/unstable/observability"
+import { treeLayer } from "./tree.ts"
 import { HttpClient } from "effect/unstable/http"
 
 /**
@@ -69,6 +70,11 @@ const formatted = (json: boolean): Logger.Logger<unknown, void> =>
   })
 
 export const loggerLayer = (): Layer.Layer<never> => {
+  // `FLUX_TRACE_CONSOLE=1` swaps the line logger for the span tree. One
+  // decision in one place rather than two layers racing to provide the same
+  // service, and it has to be exclusive: the tree already contains the log
+  // lines, so keeping both would print everything twice.
+  if (process.env.FLUX_TRACE_CONSOLE === "1") return treeLayer(currentSpan)
   const explicit = process.env.FLUX_LOG_FORMAT
   const json = explicit === undefined ? process.stdout.isTTY !== true : explicit === "json"
   return Logger.layer([formatted(json), Logger.tracerLogger])

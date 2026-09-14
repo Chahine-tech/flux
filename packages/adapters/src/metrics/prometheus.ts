@@ -105,6 +105,8 @@ export const layer = (
       const client = yield* HttpClient.HttpClient
       const decodeResponse = Schema.decodeUnknownEffect(QueryResponse)
 
+      // Named for the adapter rather than the transport, so a tree shows which
+      // port made the call instead of three indistinguishable `http.client GET`.
       const fetch = (promql: string): Effect.Effect<number, MetricsUnavailable> =>
         client.get(`${options.url}/api/v1/query`, { urlParams: { query: promql } }).pipe(
           Effect.flatMap((response) => response.json),
@@ -117,7 +119,10 @@ export const layer = (
                 service: "prometheus",
                 reason: cause instanceof Error ? cause.message : String(cause)
               })
-          )
+          ),
+          // Last in the pipe, so the span covers the decode and the retries
+          // rather than a single attempt at the transport.
+          Effect.withSpan("PrometheusMetrics.query", { attributes: { "flux.promql": promql } })
         )
 
       return { query: queryVia(makeQueryResolver(fetch)) }

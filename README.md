@@ -198,10 +198,15 @@ flux needs no RBAC rules to do any of it: it never touches the Kubernetes API.
 
 ## Running it
 
-Node ≥ 22, pnpm 11. The backing services run in Docker:
+Node ≥ 22, pnpm 11. The backing services run in Docker. The `demo` profile is
+not optional for a canary that actually completes: it brings the target the
+health check calls, the Caddy the traffic shifts go through, and the exporter
+whose numbers the thresholds read.
 
 ```bash
-docker compose up -d postgresql temporal temporal-namespace prometheus jaeger temporal-ui
+docker compose --profile demo up -d --wait \
+  postgresql temporal prometheus jaeger caddy demo-target demo-metrics temporal-ui
+docker compose run --rm temporal-namespace    # one-shot: it exits, so not `up`
 pnpm install
 pnpm typecheck && pnpm test
 ```
@@ -209,11 +214,28 @@ pnpm typecheck && pnpm test
 Then, in separate terminals:
 
 ```bash
-pnpm --filter @flux/worker dev                 # the Temporal worker
-pnpm --filter @flux/control-plane dev          # HTTP API on :8080, OpenAPI at /docs
+# The worker's defaults address the compose network (`api-v2:8080`, an nginx
+# config file), and it runs on your machine, so point it at what it can reach.
+HEALTH_URL=http://localhost:8088/ \
+ROUTER_TYPE=caddy ROUTER_ADMIN_URL=http://localhost:2019 ROUTER_SERVER_NAME=flux \
+OTLP_ENDPOINT=http://localhost:4318 \
+pnpm --filter @flux/worker dev
+
+OTLP_ENDPOINT=http://localhost:4318 pnpm --filter @flux/control-plane dev
+
 pnpm --filter @flux/cli dev -- deploy --service api --version v2 --previous-version v1
 pnpm --filter @flux/cli dev -- status --workflow-id <id> --watch
 ```
+
+`OTLP_ENDPOINT` has to be named: there is no default, because the only sensible
+one (`localhost:4318`) is wrong inside every container, and a whole trace chain
+was silently going nowhere in Kubernetes before that was noticed. Unset, the
+trace is still propagated, just not recorded.
+
+Add `FLUX_TRACE_CONSOLE=1` to draw each span tree in the terminal as it
+finishes, with log lines under the span that emitted them. Run the worker
+directly rather than through `pnpm dev`, which prefixes every line with the
+package name and shreds the drawing.
 
 Temporal UI is at :8233, Jaeger at :16686, Prometheus at :9090. Config lives in
 `flux.config.toml`; environment variables override it.

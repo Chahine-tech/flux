@@ -117,3 +117,19 @@ backlog flux already reads over gRPC, but reaching an HPA from there takes three
 steps flux has not taken: publish it as a gauge, scrape it, expose it through a
 custom-metrics adapter. CPU is there because it needs nothing installed, not
 because it is right. Override `worker.autoscaling.metrics` once the gauge exists.
+
+## Seeing the shape of the work without leaving the terminal
+
+```bash
+FLUX_TRACE_CONSOLE=1 OTLP_ENDPOINT=http://localhost:4318 pnpm dev
+```
+
+Draws each span tree as it finishes, with log lines under the span that emitted
+them. It wraps the tracer rather than replacing it, so OTLP export keeps working
+and Jaeger still gets everything.
+
+It only ever draws **one process**, which is the limit worth knowing rather than
+discovering. flux's interesting trace crosses three, from `flux deploy` through
+the control plane into the worker's activities, and Jaeger is where that lives.
+What this gives you is the shape of one process's work while you are changing
+its code.

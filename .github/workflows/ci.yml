@@ -206,6 +206,27 @@ jobs:
 
       - run: helm install flux deploy/kubernetes/chart --wait --timeout 300s
 
+      # Discovery by annotation breaks silently: a renamed label or a mistyped
+      # port leaves Prometheus with nothing to say and no error anywhere. So
+      # the assertion is that it found both workers, not that the manifests
+      # parse.
+      - name: Prometheus scrapes both workers
+        run: |
+          kubectl port-forward svc/prometheus 19090:9090 >/dev/null 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:19090/-/ready >/dev/null && break
+            sleep 2
+          done
+          for i in $(seq 1 60); do
+            up=$(curl -s 'http://localhost:19090/api/v1/targets?state=active' \
+              | python3 -c 'import json,sys; print(len([t for t in json.load(sys.stdin)["data"]["activeTargets"] if t["labels"].get("component")=="worker" and t["health"]=="up"]))')
+            [ "$up" -ge 2 ] && { echo "prometheus is scraping $up workers"; exit 0; }
+            sleep 3
+          done
+          echo "::error::prometheus never discovered the flux workers"
+          curl -s 'http://localhost:19090/api/v1/targets?state=active' | head -c 2000
+          exit 1
+
       # The plumbing is the job's, the assertion is the test's, same split as
       # the compose tier.
       #

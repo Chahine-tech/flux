@@ -49,7 +49,7 @@ let workflowBundle: Awaited<ReturnType<typeof bundleWorkflowCode>>
 
 beforeAll(async () => {
   if (!REAL) return
-  await ensureSearchAttributes(address, namespace)
+  await ensureSearchAttributes(() => {}, address, namespace)
   workflowBundle = await bundleWorkflowCode({ workflowsPath })
   connection = await NativeConnection.connect({ address })
   client = new Client({ connection: await Connection.connect({ address }), namespace })
