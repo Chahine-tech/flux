@@ -1,0 +1,61 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /*
+The last side of a claim the chart already makes twice. D46 found flux needs no
+RBAC, because it never calls the Kubernetes API. D56 said the same from the
+kernel: no root, no capabilities, nothing writable. This says it from the
+network: flux reaches these few addresses and nothing else, and the list below
+is the whole of it.
+
+Egress is where the claim lives; ingress is deliberately loose. A pod's
+liveness and readiness probes arrive from the kubelet, which is the node rather
+than a pod, and `kubectl port-forward` arrives the same way. Restricting
+ingress by source is therefore a good way to have Kubernetes kill a healthy pod
+for failing a probe it was never allowed to answer. Each workload accepts its
+own port from anywhere, which is what a probe and a forward need, and is not
+much of a concession: these ports serve a health check and a metrics page.
+
+DNS has to be granted explicitly. An egress allow-list without it resolves
+nothing, so every destination below fails by name while the policy looks
+correct, which is the most common way to write one of these wrong.
+*/ -}}
+{{- range $workload := list "worker" "control-plane" }}
+{{- $key := ternary "worker" "controlPlane" (eq $workload "worker") }}
+{{- $rules := index $.Values.networkPolicy $key }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $.Release.Name }}-{{ $workload }}
+  labels:
+    {{- include "flux.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "flux.selector" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $workload }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Unrestricted source, on this workload's own port only. See the note above.
+    - ports:
+        - port: {{ $rules.port }}
+  egress:
+    # Name resolution, or nothing below resolves.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Values.networkPolicy.dnsNamespace }}
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    {{- range $rules.egress }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .podLabels | nindent 14 }}
+      ports:
+        {{- range .ports }}
+        - port: {{ . }}
+        {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}

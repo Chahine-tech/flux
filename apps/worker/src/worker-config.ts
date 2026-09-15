@@ -8,11 +8,20 @@ import type { WorkerTuner } from "@temporalio/worker"
  */
 
 /**
- * Deployment-based Worker Versioning: when a build id is provided,
- * this worker joins a named deployment and pins in-flight workflows to their
- * version, so a rolling upgrade (v1 → v2) never breaks a canary mid-flight —
- * new deployments start on v2, ones already running finish on v1. Left off in
- * dev/tests (no build id), where a versioning-capable server isn't required.
+ * Deployment-based Worker Versioning: when a build id is provided, this worker
+ * joins a named deployment and pins in-flight workflows to their version, so
+ * new deployments start on v2 while ones already running finish on v1. Left off
+ * in dev and tests (no build id), where a versioning-capable server is not
+ * required.
+ *
+ * **"Finish on v1" requires a v1 worker to still exist, and a Kubernetes
+ * rolling update removes them all.** Measured in D68: a canary pinned to v1
+ * stops dead the moment the last v1 pod is replaced, and even its status query
+ * cannot be answered, because a query is served by a worker of the pinned
+ * version and there is none. Nothing is lost, and it resumes within seconds of
+ * a v1 worker returning, but the deployment is stranded until then. Pinning and
+ * retiring a version are in tension: a rolling update that replaces every pod
+ * at once strands every canary that was in flight.
  */
 export const versioningOptions = (env: NodeJS.ProcessEnv = process.env) => {
   const buildId = env.FLUX_WORKER_BUILD_ID

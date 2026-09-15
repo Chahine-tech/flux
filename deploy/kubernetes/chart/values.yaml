@@ -113,3 +113,38 @@ secrets:
 observability:
   otlpEndpoint: "http://jaeger:4318"
   environment: "k3d-lab"
+
+# What flux is allowed to reach, which is the network side of a claim the chart
+# makes twice already: no RBAC (D46), no root or capabilities (D56). The list is
+# the claim, so it is written out rather than inferred: anything absent from it
+# is denied.
+#
+# Labels differ per dependency because this lab's manifests are not uniform
+# (`app:` for Temporal and Prometheus, `app.kubernetes.io/component:` for the
+# router), so they are values rather than something the template guesses.
+networkPolicy:
+  enabled: true
+  # The namespace label CoreDNS lives under. `kubernetes.io/metadata.name` is
+  # set automatically on every namespace since 1.21.
+  dnsNamespace: kube-system
+  worker:
+    port: 9464
+    egress:
+      - podLabels: { app: temporal }
+        ports: [7233]
+      - podLabels: { app: prometheus }
+        ports: [9090]
+      - podLabels: { app.kubernetes.io/component: caddy }
+        ports: [2019]
+      # The deployment target's health endpoint.
+      - podLabels: { app: demo-target }
+        ports: [80, 8080]
+      - podLabels: { app.kubernetes.io/name: jaeger }
+        ports: [4318]
+  controlPlane:
+    port: 8080
+    egress:
+      - podLabels: { app: temporal }
+        ports: [7233]
+      - podLabels: { app.kubernetes.io/name: jaeger }
+        ports: [4318]

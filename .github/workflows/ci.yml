@@ -64,6 +64,31 @@ jobs:
           print("both flux deployments are non-root, unprivileged and read-only")
           PY
 
+      # The network side of the same claim. An egress allow-list is only a claim
+      # while something checks it, and the way these break is silent: a missing
+      # DNS rule leaves every destination unresolvable while the policy still
+      # renders perfectly.
+      - name: The chart still fences flux's egress
+        run: |
+          helm template flux deploy/kubernetes/chart > /tmp/netpol.yaml
+          python3 - <<'PY'
+          import yaml
+          policies = {
+              d["metadata"]["name"]: d
+              for d in yaml.safe_load_all(open("/tmp/netpol.yaml"))
+              if d and d.get("kind") == "NetworkPolicy"
+          }
+          assert set(policies) == {"flux-worker", "flux-control-plane"}, policies.keys()
+          for name, policy in policies.items():
+              spec = policy["spec"]
+              assert set(spec["policyTypes"]) == {"Ingress", "Egress"}, name
+              rules = spec["egress"]
+              dns = [r for r in rules if any(p.get("port") == 53 for p in r.get("ports", []))]
+              assert dns, f"{name}: no DNS egress, every destination would fail to resolve"
+              assert len(rules) > 1, f"{name}: DNS only, nothing else reachable"
+          print("both flux deployments have a fenced egress that still resolves names")
+          PY
+
       # Built once, here, and handed to every job that needs it. The images
       # assemble a build rather than producing one, so three jobs were each
       # running the same `pnpm install` and the same tsdown pass to produce
