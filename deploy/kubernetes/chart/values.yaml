@@ -54,7 +54,25 @@ worker:
   # which is the only place a worker's *slots* are visible. `WorkerStatus`
   # reports what is in flight, never what the resource tuner is currently
   # willing to admit, and `temporal_resource_slots_mem_pid_output` is that
-  # decision rather than its consequence (D64).
+  # decision rather than its consequence.
+  #
+  # `FLUX_WORKER_BUILD_ID` is the one to be careful with, because setting it is
+  # a migration rather than a setting. It turns on Worker Deployment Versioning,
+  # and the first poll writes a version into Temporal that outlives these pods,
+  # this release, and the cluster. Two consequences neither Kubernetes nor Helm
+  # will warn you about:
+  #
+  #   1. A rolling update strands in-flight work. Executions are PINNED to the
+  #      build that started them, so replacing every pod at once removes the
+  #      only workers allowed to run them. They do not fail; they stop, and
+  #      their status queries stop being answerable, until a worker on that
+  #      build returns. Roll one build at a time, or accept the pause.
+  #
+  #   2. Removing this value does not turn versioning off. Temporal keeps
+  #      routing the task queue to the last current version, so unversioned
+  #      workers become invisible to it: pods Ready, probes green, pollers
+  #      polling, and nothing running at all. The server is the only place that
+  #      knows. See deploy/kubernetes/README.md for how to check and undo it.
   extraEnv: {}
 
   podDisruptionBudget:

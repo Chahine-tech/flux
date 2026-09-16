@@ -1,5 +1,24 @@
 # PostgreSQL for Temporal. Part of the lab, not of flux: the chart deploys flux,
 # these manifests provide the cluster it talks to.
+#
+# It holds a PVC rather than an emptyDir, and the reason is the lab's own
+# subject. flux's claim is that a crash does not lose a deployment; an emptyDir
+# survives a container restart but not a pod replacement, so every `kubectl
+# apply` touching these manifests, every eviction and every reschedule wiped
+# every workflow history in the cluster. Durability cannot be studied on top of
+# storage that forgets more readily than the thing being studied.
+#
+# **Still a Deployment, deliberately, and not a StatefulSet.** What a
+# StatefulSet adds is per-pod identity, per-pod DNS, ordered start and stop, and
+# a claim template per replica. A single Postgres needs none of it: the Service
+# is the address, and there is no second replica to order against. The property
+# that actually matters here is already present, `strategy: Recreate`, which
+# terminates the old pod before starting the new one. Without it a rolling
+# update would start a second pod while the first still held the volume, and
+# because `local-path` is ReadWriteOnce on a single node it would mount
+# successfully, leaving two postgres processes writing one PGDATA. A
+# StatefulSet would fix that too, by a different route, and bring machinery
+# nothing here uses.
 apiVersion: v1
 kind: Service
 metadata:
@@ -7,6 +26,19 @@ metadata:
 spec:
   selector: { app: postgresql }
   ports: [{ port: 5432 }]
+---
+# No storageClassName: the default is used, which is `local-path` on k3d. Naming
+# one would tie these manifests to k3d, and the lab is meant to be readable on
+# any cluster that has a default class.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -35,6 +67,6 @@ spec:
           volumeMounts:
             - { name: data, mountPath: /var/lib/postgresql/data }
       volumes:
-        # Ephemeral on purpose: this is a laboratory, and a fresh cluster each
-        # time is a feature when the point is watching things break.
-        - { name: data, emptyDir: {} }
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgresql

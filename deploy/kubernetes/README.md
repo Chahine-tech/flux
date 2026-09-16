@@ -133,3 +133,48 @@ discovering. flux's interesting trace crosses three, from `flux deploy` through
 the control plane into the worker's activities, and Jaeger is where that lives.
 What this gives you is the shape of one process's work while you are changing
 its code.
+
+## Worker versioning is a migration, not a setting
+
+Setting `worker.extraEnv.FLUX_WORKER_BUILD_ID` turns on Temporal's Worker
+Deployment Versioning, and the worker's first poll writes a version into the
+*server* that outlives the pods, the Helm release and the cluster. Neither
+Kubernetes nor Helm has any idea it exists, which is what makes both of its
+failure modes quiet.
+
+**A rolling update strands in-flight work.** Executions are PINNED to the build
+that started them, so replacing every pod at once removes the only workers
+allowed to run them. A canary mid-rollout does not fail: it stops, and its
+status query stops being answerable too, because a query is served by a worker
+of the pinned version. It resumes intact seconds after a worker on that build
+comes back. Roll one build at a time, or accept the pause.
+
+**Removing the value does not turn versioning off.** Temporal keeps routing the
+task queue to the last version it was told was current, so unversioned workers
+are invisible to it. What that looks like: pods Ready, probes green, pollers
+`POLLING`, Temporal reachable from inside the worker, and not one workflow
+making progress. Every status query comes back as a 503 after the client
+deadline, because no worker answers.
+
+The server is the only place that knows, so it is the only place to ask:
+
+```bash
+kubectl run tctl --rm -i --restart=Never --image=temporalio/admin-tools:1.31.2 \
+  --command -- temporal worker deployment describe \
+  --address temporal:7233 --name flux-worker
+```
+
+If it reports a current version and your workers no longer carry that build id,
+that is the state above. Undo it with:
+
+```bash
+kubectl run tctl --rm -i --restart=Never --image=temporalio/admin-tools:1.31.2 \
+  --command -- temporal worker deployment set-current-version \
+  --address temporal:7233 --deployment-name flux-worker --unversioned --yes
+```
+
+(`--deployment-name` here, `--name` above. The CLI spells the same argument two
+ways depending on the subcommand, and copying one line into the other fails with
+`unknown flag`.)
+
+Work resumes immediately; nothing is lost while it is stuck.
