@@ -178,3 +178,44 @@ ways depending on the subcommand, and copying one line into the other fails with
 `unknown flag`.)
 
 Work resumes immediately; nothing is lost while it is stuck.
+
+## Reconciling the router
+
+Stopping the cluster with a canary in flight showed that a durable workflow and
+a non-durable actuator drift apart: Caddy came back with an empty configuration
+while flux still reported 10% on the new version. Both were sincere; only one
+described traffic. It repaired itself when the next step wrote again, which
+works only while a step is still due.
+
+`driftCheck` is the piece that closes that, and the lab can run it now:
+
+```bash
+helm upgrade flux deploy/kubernetes/chart \
+  --set driftDetection.enabled=true \
+  --set driftDetection.services[0].service=api \
+  --set driftDetection.services[0].version=v2
+```
+
+A post-install job calls `POST /drift`, which creates a Temporal Schedule per
+service. Emptying Caddy's routes by hand after that, which is exactly the state
+a cluster restart leaves behind:
+
+```bash
+kubectl run saboteur --rm -i --restart=Never --image=curlimages/curl:8.11.1 \
+  --command -- curl -sS -X PATCH -H 'content-type: application/json' -d '[]' \
+  http://caddy:2019/config/apps/http/servers/flux/routes
+```
+
+restores `api-v2` at weight 100 within one interval, measured at nine seconds
+against a thirty second schedule.
+
+Two things to know. Reconciliation is assertive: a service under drift detection
+has any manual routing change undone within an interval, which is why it is off
+by default. And turning it off in the chart does not remove the schedule, the
+same way removing `FLUX_WORKER_BUILD_ID` does not turn versioning off. The
+schedule lives on the server:
+
+```bash
+kubectl run tsched --rm -i --restart=Never --image=temporalio/admin-tools:1.31.2 \
+  --command -- temporal schedule list --address temporal:7233 --namespace default
+```

@@ -166,3 +166,24 @@ networkPolicy:
         ports: [7233]
       - podLabels: { app.kubernetes.io/name: jaeger }
         ports: [4318]
+
+# Reconciliation: a Temporal Schedule per service that compares the router's
+# actual weights to the declared ones and puts them back. flux has had this
+# since the drift-check workflow existed; the lab had never run it.
+#
+# Off by default on purpose. With it on, a service's routing is forced back to
+# `version` within one interval, so a deliberate manual change is undone. That
+# is right for a system that owns the route and wrong for one that shares it,
+# and a chart cannot know which it is deploying into.
+#
+# Like worker versioning, turning this on is a migration rather than a setting.
+# The job creates a Temporal Schedule, which lives on the server: setting
+# `enabled: false` afterwards stops the job from running again and does nothing
+# at all to the schedule, which keeps reconciling on its interval. Remove it
+# explicitly with `DELETE /drift/{service}` on the control plane, or
+# `temporal schedule delete --schedule-id flux-drift-<service>`.
+driftDetection:
+  enabled: false
+  everyMs: 30000
+  services: []
+    # - { service: api, version: v2 }

@@ -1,0 +1,77 @@
+{{- if .Values.driftDetection.enabled }}
+{{- /*
+Turning on the reconciliation half of flux, which it has had since D17 and which
+the lab has never run.
+
+D72 is why it earns a place here. Stopping the cluster with a canary in flight
+proved the workflow durable: it resumed and promoted. It also showed the other
+half, that a durable orchestrator plus a non-durable actuator diverge. Caddy came
+back with an empty configuration while flux still reported 10%, and the only
+thing that repaired it was the next step happening to write again. A canary whose
+last write has already happened has nothing left to rewrite.
+
+`driftCheck` is the answer: a Temporal Schedule reads the router's actual state
+and, with `reconcile` on, puts the desired weights back. Enabling it is an API
+call rather than a manifest, so this is a Job, the same shape as
+`temporal-namespace`: one-shot, idempotent, and it exits.
+
+**Off by default, because reconciliation is a strong behaviour to assume.** A
+service under drift detection has its routing forced back to the declared
+version, so a deliberate manual change is undone within one interval. That is
+correct for a system that owns the route and wrong for one that shares it, and
+the chart cannot know which this is.
+*/ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-drift
+  labels:
+    {{- include "flux.labels" . | nindent 4 }}
+  annotations:
+    # After the control plane exists, since this calls it.
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "flux.selector" . | nindent 8 }}
+        app.kubernetes.io/component: drift
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: drift
+          image: curlimages/curl:8.11.1
+          env:
+            - name: FLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: API_TOKEN
+                  optional: true
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              base="http://{{ .Release.Name }}-control-plane:8080"
+              # The control plane may still be coming up behind the hook.
+              i=0
+              until curl -sf -m 5 "$base/health/ready" >/dev/null; do
+                i=$((i + 1))
+                [ "$i" -ge 60 ] && { echo "control plane never became ready"; exit 1; }
+                sleep 2
+              done
+              {{- range .Values.driftDetection.services }}
+              echo "drift: {{ .service }} pinned to {{ .version }}"
+              curl -sS -f -m 10 -X POST "$base/drift" \
+                -H 'content-type: application/json' \
+                ${FLUX_TOKEN:+-H "authorization: Bearer $FLUX_TOKEN"} \
+                -d '{"service":"{{ .service }}","version":"{{ .version }}","everyMs":{{ $.Values.driftDetection.everyMs }}}'
+              echo
+              {{- end }}
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+{{- end }}
