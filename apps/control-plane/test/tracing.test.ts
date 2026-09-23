@@ -52,6 +52,7 @@ const MockTemporal = Layer.succeed(TemporalClient, {
   listClosed: () => Effect.succeed([]),
   approve: () => Effect.void,
   abort: () => Effect.void,
+  recordTaskOutcome: () => Effect.void,
   ensureDriftSchedule: () => Effect.succeed("flux-drift-api"),
   disableDrift: () => Effect.void,
   reachable: Effect.succeed(true),

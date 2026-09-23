@@ -129,6 +129,11 @@ export const DeploymentsHandlers = HttpApiBuilder.group(FluxApi, "deployments", 
         const temporal = yield* TemporalClient
         yield* temporal.approve(params.workflowId)
       }))
+    .handle("recordTaskOutcome", ({ params, payload }) =>
+      Effect.gen(function*() {
+        const temporal = yield* TemporalClient
+        yield* temporal.recordTaskOutcome(params.workflowId, payload)
+      }))
     .handle("abort", ({ params }) =>
       Effect.gen(function*() {
         const temporal = yield* TemporalClient

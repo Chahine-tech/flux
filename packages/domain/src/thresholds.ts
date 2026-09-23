@@ -82,7 +82,11 @@ export type MetricReadings = Readonly<Record<string, Reading>>
  */
 export const evaluateThresholds = (
   readings: MetricReadings,
-  rules: ReadonlyArray<MetricRule>
+  // Only `name` and `max` are ever read: `query` and `sampleSize` say how to
+  // obtain a reading, which is finished business by the time one is being
+  // judged. Typing it this way lets a rule fed by pushed verdicts, which has no
+  // query at all, be judged by the same function rather than by a copy of it.
+  rules: ReadonlyArray<Pick<MetricRule, "name" | "max">>
 ): ThresholdEvaluation => {
   const breaches: ThresholdBreach[] = []
   const pending: PendingReading[] = []

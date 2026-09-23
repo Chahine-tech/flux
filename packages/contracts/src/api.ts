@@ -3,7 +3,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSecur
 import { DeploymentState, DeploymentSummary } from "./deployment.ts"
 import { EnableDriftRequest, EnableDriftResponse } from "./drift.ts"
 import { StatsResponse } from "./stats.ts"
-import { TriggerDeploymentRequest, TriggerDeploymentResponse, TriggerMultiRequest } from "./trigger.ts"
+import { TaskOutcomeRequest, TriggerDeploymentRequest, TriggerDeploymentResponse, TriggerMultiRequest } from "./trigger.ts"
 
 /**
  * The flux HTTP API — one declarative definition shared by both ends.
@@ -162,6 +162,26 @@ const deployments = HttpApiGroup.make("deployments")
   .add(
     HttpApiEndpoint.post("abort", "/deployments/:workflowId/abort", {
       params: WorkflowIdParam,
+      error: [DeploymentNotFound, TemporalUnavailable]
+    })
+  )
+  .add(
+    /**
+     * Report one unit of work's outcome to a running deployment.
+     *
+     * For verdicts that only exist later: the pull request merged, the suite
+     * went green, a reviewer accepted the work. The caller is whatever learned
+     * it, usually minutes or hours after flux routed the work, and it lands as
+     * a Temporal signal so it is accepted whether or not a worker is up.
+     *
+     * Fire and forget by design. There is no acknowledgement of *counting*
+     * beyond the request succeeding, because the sender has nothing useful to
+     * do with the tally and waiting for one would make an outside system's
+     * write depend on a worker being alive.
+     */
+    HttpApiEndpoint.post("recordTaskOutcome", "/deployments/:workflowId/outcomes", {
+      params: WorkflowIdParam,
+      payload: TaskOutcomeRequest,
       error: [DeploymentNotFound, TemporalUnavailable]
     })
   )

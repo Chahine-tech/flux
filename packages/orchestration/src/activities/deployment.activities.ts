@@ -151,7 +151,9 @@ export const createActivities = (
                   version: p.version,
                   window: Duration.millis(p.windowMs),
                   pollInterval: Duration.millis(p.pollIntervalMs),
-                  rules: p.rules
+                  rules: p.rules,
+                  outcomeRule: p.outcomeRule,
+                  outcomes: p.outcomes
                 })),
                 toApplicationFailure
               )

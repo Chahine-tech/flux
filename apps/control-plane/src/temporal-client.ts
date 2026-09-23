@@ -69,6 +69,11 @@ export class TemporalClient extends Context.Service<TemporalClient, {
     workflowId: string
   ) => Effect.Effect<void, DeploymentNotFound | DeploymentNotActionable | TemporalUnavailable>
   readonly abort: (workflowId: string) => Effect.Effect<void, DeploymentNotFound | TemporalUnavailable>
+  /** Report one unit of work's outcome to a running deployment. */
+  readonly recordTaskOutcome: (
+    workflowId: string,
+    outcome: { readonly version: string; readonly success: boolean }
+  ) => Effect.Effect<void, DeploymentNotFound | TemporalUnavailable>
   /** Create/update the drift-check Schedule for a service; returns its id. */
   readonly ensureDriftSchedule: (
     service: string,
@@ -240,6 +245,16 @@ export const make = (client: Client): typeof TemporalClient.Service => {
     abort: (workflowId) =>
       Effect.tryPromise({
         try: () => deadline(() => handle(workflowId).executeUpdate("abort")),
+        catch: (error) => classifyNotFound(error, workflowId)
+      }),
+
+    // `signal`, not `executeUpdate`: the server accepts it with no worker
+    // running and delivers it when one returns. An update would fail, and a
+    // verdict lost because the workers were mid-redeploy would bias the sample
+    // the decision rests on, silently and in the healthy direction.
+    recordTaskOutcome: (workflowId, outcome) =>
+      Effect.tryPromise({
+        try: () => deadline(() => handle(workflowId).signal("taskOutcome", outcome)),
         catch: (error) => classifyNotFound(error, workflowId)
       }),
 

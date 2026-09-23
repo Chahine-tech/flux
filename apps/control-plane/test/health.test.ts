@@ -24,6 +24,7 @@ const stub = (reachable: boolean) =>
     listClosed: () => Effect.succeed([]),
     approve: () => Effect.void,
     abort: () => Effect.void,
+    recordTaskOutcome: () => Effect.void,
     ensureDriftSchedule: () => Effect.succeed("s"),
     disableDrift: () => Effect.void,
     reachable: Effect.succeed(reachable)

@@ -155,3 +155,92 @@ describe("a window that cannot decide", () => {
     expect(result.kind).toBe("RolledBack")
   }, 60_000)
 })
+
+describe("verdicts signalled into a running deployment", () => {
+  it("counts them and hands the running tally to each window", async () => {
+    // One verdict arrives per window, from inside the activity, which is the
+    // shape that matters: a verdict that lands mid-deployment has to reach the
+    // *next* decision, not the one already taken.
+    const seen: Array<{ total: number; failures: number } | undefined> = []
+    let signal: ((success: boolean) => Promise<void>) | undefined
+
+    const activities: DeploymentActivities = {
+      healthCheck: async () => {},
+      setTrafficWeight: async () => {},
+      monitorStep: async (params) => {
+        seen.push(params.outcomes)
+        await signal?.(true)
+        return undecided as Awaited<ReturnType<DeploymentActivities["monitorStep"]>>
+      },
+      notify: async () => {},
+      readRouterState: async () => [],
+      recordOutcome: async () => {},
+      postmortem: async () => {}
+    }
+
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowBundle,
+      activities
+    })
+    const handle = await env.client.workflow.start("deploymentWorkflow", {
+      taskQueue: TASK_QUEUE,
+      workflowId: `outcomes-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      args: [input({
+        maxMonitorMs: 3_000,
+        outcomeRule: { name: "taskFailureRate", max: 0.05 }
+      })]
+    })
+    signal = (success) => handle.signal("taskOutcome", { version: "v2", success })
+
+    await worker.runUntil(handle.result())
+
+    // Three windows inside the budget, each seeing one more verdict than the
+    // last. The first sees none, because none had been sent yet.
+    expect(seen).toEqual([
+      { total: 0, failures: 0 },
+      { total: 1, failures: 0 },
+      { total: 2, failures: 0 }
+    ])
+  }, 60_000)
+
+  it("ignores verdicts about a version it is not rolling out", async () => {
+    // The rule is a limit on the new version, not a comparison between two.
+    const seen: Array<{ total: number; failures: number } | undefined> = []
+    let signal: ((version: string) => Promise<void>) | undefined
+
+    const activities: DeploymentActivities = {
+      healthCheck: async () => {},
+      setTrafficWeight: async () => {},
+      monitorStep: async (params) => {
+        seen.push(params.outcomes)
+        await signal?.("v1")
+        return undecided as Awaited<ReturnType<DeploymentActivities["monitorStep"]>>
+      },
+      notify: async () => {},
+      readRouterState: async () => [],
+      recordOutcome: async () => {},
+      postmortem: async () => {}
+    }
+
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowBundle,
+      activities
+    })
+    const handle = await env.client.workflow.start("deploymentWorkflow", {
+      taskQueue: TASK_QUEUE,
+      workflowId: `other-version-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      args: [input({ maxMonitorMs: 2_000, outcomeRule: { name: "taskFailureRate", max: 0.05 } })]
+    })
+    signal = (version) => handle.signal("taskOutcome", { version, success: false })
+
+    await worker.runUntil(handle.result())
+
+    expect(seen.every((tally) => tally?.total === 0)).toBe(true)
+  }, 60_000)
+})

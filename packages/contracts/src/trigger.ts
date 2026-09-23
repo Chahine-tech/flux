@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { DeploymentWindow, Identifier, Thresholds } from "@flux/domain"
+import { DeploymentWindow, Identifier, OutcomeRule, Thresholds } from "@flux/domain"
 
 /**
  * The body of `POST /deployments` — the request that starts a canary.
@@ -63,6 +63,17 @@ export const TriggerDeploymentRequest = Schema.Struct({
    */
   maxMonitorMs: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
   /**
+   * A rule judged on verdicts pushed to the running deployment rather than on a
+   * query, for outcomes that are only known later: the pull request merged, the
+   * suite went green, someone accepted the work.
+   *
+   * Verdicts arrive at `POST /deployments/{id}/outcomes` and land as Temporal
+   * signals, so the count is the number received and the interval from
+   * `confidence.ts` applies to it unchanged. Too few verdicts is undecided, not
+   * healthy, which is the whole reason this is worth having.
+   */
+  outcomeRule: Schema.optionalKey(OutcomeRule),
+  /**
    * Optional deploy window as a cron expression. The canary may only
    * start while `now` is inside it; absent means always allowed. Checked by the
    * control plane before admission — it never reaches the workflow.
@@ -101,3 +112,18 @@ export const TriggerMultiRequest = Schema.Struct({
   onFailure: Schema.optionalKey(Schema.Literals(["fail-fast", "abort-dependents", "continue"]))
 })
 export type TriggerMultiRequest = typeof TriggerMultiRequest.Type
+
+/**
+ * One unit of work's verdict, pushed to a running deployment.
+ *
+ * `version` is required and checked against the deployment rather than assumed,
+ * because the sender is an outside system that may well be reporting on work
+ * the previous version handled. Those are dropped: the rule is a limit on the
+ * new version, not a comparison between two, and counting the old one's work
+ * would dilute the only rate being judged.
+ */
+export const TaskOutcomeRequest = Schema.Struct({
+  version: Identifier,
+  success: Schema.Boolean
+})
+export type TaskOutcomeRequest = typeof TaskOutcomeRequest.Type

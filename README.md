@@ -1,5 +1,5 @@
 > [!NOTE]
-> A learning project — I built it to go deep on Effect v4 and Temporal, not to run in production.
+> A learning project. I built it to go deep on Effect v4 and Temporal, not to run in production.
 
 # flux
 
@@ -68,9 +68,60 @@ Choices that go past plumbing:
 - Two threshold rules that share a PromQL query hit Prometheus once per poll, not
   twice, through a `RequestResolver`. The metrics port has a second backend for
   apps without Prometheus: a generic HTTP-JSON adapter that reads a value at a
-  JSON path (`"<url> <path>"`), with the same one-fetch-per-shared-query dedup —
+  JSON path (`"<url> <path>"`), with the same one-fetch-per-shared-query dedup, so
   the query stays an opaque string the adapter interprets, so nothing above the
   port changed.
+- A rule can admit that it does not know yet. A threshold comparison needs a
+  large sample to mean anything, and a canary over a workload that produces tens
+  of observations rather than thousands quietly stops having one: 1 failure in
+  30 reads as 3.3%, and against a 5% limit the plain rule says promote. The true
+  rate consistent with that sample runs from 0.6% to 16.7%, so the reading is
+  equally compatible with a version far better than the limit and one three
+  times worse. The worst case looks best: zero failures in 20 observations still
+  spans up to 16%, and a threshold calls it perfect. So a rule may declare
+  `sampleSize`, the PromQL for its denominator, and its rate is then compared
+  through a Wilson interval with three possible answers rather than two. An
+  undecided window is extended up to `maxMonitorMs` rather than resolved by
+  guesswork, and a budget spent without an answer rolls back, because leaving
+  traffic on a version nothing could vouch for is the one option that is not a
+  decision.
+
+  ```json
+  {
+    "service": "coding-agent", "version": "v2", "previousVersion": "v1",
+    "strategy": { "kind": "canary", "steps": [{ "percent": 10, "monitorMs": 3600000, "requiresApproval": false }] },
+    "rules": [{
+      "name": "taskFailureRate",
+      "query": "sum(rate(agent_task_failures_total{version=\"v2\"}[1h])) / sum(rate(agent_tasks_total{version=\"v2\"}[1h]))",
+      "sampleSize": "sum(increase(agent_tasks_total{version=\"v2\"}[1h]))",
+      "max": 0.05
+    }],
+    "maxMonitorMs": 86400000,
+    "pollIntervalMs": 60000
+  }
+  ```
+
+  Leave `sampleSize` out and the comparison is exactly what it always was, which
+  is the right thing for a metric backed by thousands of requests. The interval
+  is only meaningful for a proportion, so a value outside `[0, 1]` falls back to
+  the plain comparison however the rule was written: a p99 latency handed a
+  sample size is a mistake, and inventing an interval for it would make that
+  mistake confident instead of merely wrong.
+
+- A rule can also be judged on verdicts that arrive later. Whether a unit of
+  work succeeded is often settled well after it was routed: the pull request
+  merges, the suite goes green, a reviewer accepts it. There is no gauge to
+  scrape at the moment of the decision, so `outcomeRule` is fed by
+  `POST /deployments/{id}/outcomes` instead, which lands as a Temporal signal on
+  the running deployment. A signal rather than an update, deliberately: Temporal
+  accepts one whether or not a worker is up and delivers it when one returns,
+  while an update needs a live worker. A verdict lost because the workers
+  happened to be mid-redeploy would bias the sample silently, and in the healthy
+  direction. The tally rides through `continueAsNew`, so a deployment that
+  bounds its own history does not discard the evidence it has spent days
+  gathering, and it goes through the same interval as a scraped rate: zero
+  verdicts is `Inconclusive`, not a tidy 0% failure rate.
+
 - Admission control (one deployment per service, plus a global cap) is a single
   STM transaction: a `TxSemaphore` and a `TxHashMap` updated together, so two
   concurrent triggers can't over-admit.
@@ -81,8 +132,8 @@ Choices that go past plumbing:
   recorded history.
 - `status --watch` streams live state over a websocket, fed by a `PubSub` a poller
   writes to.
-- `/stats` answers questions Temporal's visibility can't — rollback rate per
-  service, mean canary duration — from a small SQLite read model.
+- `/stats` answers questions Temporal's visibility can't (rollback rate per
+  service, mean canary duration) from a small SQLite read model.
 - A multi-service rollout is a parent workflow over one child per service, and it
   deploys them in dependency order. You declare what needs what; the control
   plane compiles that into a topological plan with Effect's `Graph` and hands the
@@ -110,14 +161,14 @@ Choices that go past plumbing:
 - The rollout shape is a strategy the workflow is polymorphic over. Canary shifts
   traffic in steps; blue/green flips 100% at once after a health check and bakes,
   rolling back with a single shift because the old version was never scaled down.
-  Same activities, same ports, same saga — only the workflow's branch differs.
+  Same activities, same ports, same saga, and only the workflow's branch differs.
   Adding it needed no `workflow.patched()`: the branch is chosen by the input, so
   histories recorded before it still take the identical canary path.
 - An abort cancels the in-flight monitor immediately (a `CancellationScope`)
   instead of waiting out the window.
-- The router port has two deliberately opposite implementations — nginx renders
+- The router port has two deliberately opposite implementations. nginx renders
   a file and reloads a process behind a lock; Caddy PATCHes its admin API,
-  stateless and lock-free — and the same canary passes through both without a
+  stateless and lock-free, and the same canary passes through both without a
   line changing above the port.
 - Payloads above 1 KiB are gzipped on the wire and in Temporal's history by a
   codec that never enters the workflow VM; a `/codec` endpoint lets the
@@ -173,12 +224,12 @@ A pnpm + Turborepo monorepo.
 | `@flux/application` | Use cases and the four ports: metrics, router, health, notify |
 | `@flux/adapters` | Port implementations: Prometheus, nginx, Caddy, HTTP health, Slack |
 | `@flux/orchestration` | Temporal workflows and activities |
-| `@flux/comparison` | The same canary on Effect's own workflow engine — an experiment, not shipped |
+| `@flux/comparison` | The same canary on Effect's own workflow engine, an experiment, not shipped |
 | `@flux/contracts` | Shared HTTP + RPC schemas, so the CLI and control plane agree |
 | `@flux/config` | TOML + env configuration |
 | `apps/worker` | Runs the Temporal worker |
 | `apps/control-plane` | HTTP API, websocket watch, SQLite read model |
-| `apps/cli` | `flux` — deploy, deploy-multi, drift, status, stats, approve, abort, history |
+| `apps/cli` | `flux`: deploy, deploy-multi, drift, status, stats, approve, abort, history |
 
 ## Kubernetes
 
@@ -265,8 +316,8 @@ admin API, including a fetch through the proxy to check the config it wrote is o
 Caddy serves rather than only one it stores. And, with the real adapters pointed at local HTTP
 doubles, a full canary to `Succeeded` that checks the side effects actually
 happened: the health endpoint got probed, the nginx config got written.
-Three captured histories — a promotion, a rollback, and a dependency-ordered
-rollout that loses a service in the middle — are committed and replayed against
+Three captured histories (a promotion, a rollback, and a dependency-ordered
+rollout that loses a service in the middle) are committed and replayed against
 the current workflow code on every run, so an edit that would break in-flight
 deployments fails as a determinism error before it ships.
 

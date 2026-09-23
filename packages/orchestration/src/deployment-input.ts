@@ -9,11 +9,20 @@
  * This file must never import `effect` (directly or transitively).
  */
 
-/** A metric rule crossing to the workflow: watch `query`, breach if `> max`. */
+/**
+ * A metric rule crossing to the workflow: watch `query`, breach if `> max`.
+ *
+ * Structurally the domain's `MetricRule`, restated rather than imported so the
+ * workflow bundle stays clear of Schema. The cost of that is this file drifting
+ * from the domain silently, which is how `sampleSize` came to be accepted by
+ * the contract and rejected here.
+ */
 export interface DeploymentRule {
   readonly name: string
   readonly query: string
   readonly max: number
+  /** PromQL for the denominator, when the metric is a proportion. See `confidence.ts`. */
+  readonly sampleSize?: string | undefined
 }
 
 export interface DeploymentStepInput {
@@ -61,6 +70,12 @@ export interface DeploymentInput {
    */
   readonly maxMonitorMs?: number | undefined
   /**
+   * A rule judged on verdicts signalled into the running deployment, for
+   * outcomes only known later. No query and no `sampleSize`: the count is the
+   * number of verdicts received, which the workflow is the one holding.
+   */
+  readonly outcomeRule?: { readonly name: string; readonly max: number } | undefined
+  /**
    * Bound a single workflow run to this many steps: after completing that many,
    * the workflow continues-as-new with the remaining steps to keep history
    * small. Temporal's own `continueAsNewSuggested` triggers the same
@@ -76,8 +91,14 @@ export interface DeploymentInput {
     readonly completedSteps: number
     /** Traffic already diverted to the new version — rebuild the rollback compensation. */
     readonly trafficShifted: boolean
-    /** Percent reached before this run — the rollback point if aborted immediately. */
+    /** Percent reached before this run: the rollback point if aborted immediately. */
     readonly lastPercent: number
+    /**
+     * Verdicts counted in earlier runs. They have to survive `continueAsNew`
+     * or a long deployment loses its evidence every time it bounds its own
+     * history, which is exactly when it has accumulated the most.
+     */
+    readonly outcomes?: { readonly total: number; readonly failures: number } | undefined
   }
 }
 

@@ -90,6 +90,27 @@ export const abortUpdate = defineUpdate<void, []>("abort")
  * `abort` update, without the synchronous confirmation.
  */
 export const abortSignal = defineSignal("abortSignal")
+/**
+ * A verdict on one unit of work, pushed in from wherever the truth lives.
+ *
+ * A signal rather than an update, and the reason is about who is calling. The
+ * sender is an outside system (a CI job, a webhook, a reviewer's click) that
+ * learned the outcome minutes or hours after flux routed the work. Temporal
+ * accepts a signal whether or not a worker is running, and delivers it when one
+ * returns; an update needs a live worker and fails without one. Losing a verdict
+ * because the workers happened to be mid-redeploy would quietly bias the very
+ * sample the decision rests on.
+ *
+ * Verdicts for any version other than the one being rolled out are dropped. The
+ * rule is a limit on the new version, not a comparison between two, so counting
+ * the old one's work would dilute the only rate being judged.
+ */
+export interface TaskOutcome {
+  readonly version: string
+  readonly success: boolean
+}
+export const taskOutcomeSignal = defineSignal<[TaskOutcome]>("taskOutcome")
+
 /** Read the live deployment state. */
 export const statusQuery = defineQuery<DeploymentState>("status")
 
@@ -195,7 +216,17 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
     cancelMonitor?.()
   }
 
+  // Seeded from the previous run, so bounding history does not discard evidence.
+  let outcomes = input.resumeFrom?.outcomes ?? { total: 0, failures: 0 }
+
   setHandler(statusQuery, () => state)
+  setHandler(taskOutcomeSignal, (outcome) => {
+    if (outcome.version !== input.version) return
+    outcomes = {
+      total: outcomes.total + 1,
+      failures: outcomes.failures + (outcome.success ? 0 : 1)
+    }
+  })
   setHandler(abortSignal, abort)
   setHandler(abortUpdate, abort, {
     validator: () => {
@@ -337,7 +368,8 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
           resumeFrom: {
             completedSteps: completedBefore + stepIndex + 1,
             trafficShifted: compensations.length > 0,
-            lastPercent: step.percent
+            lastPercent: step.percent,
+            outcomes
           }
         })
       }
@@ -404,7 +436,12 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
             version: input.version,
             windowMs: thisWindowMs,
             pollIntervalMs: input.pollIntervalMs,
-            rules: input.rules
+            rules: input.rules,
+            // Read at the top of each window rather than passed once: verdicts
+            // keep arriving while one runs, and an extension exists precisely
+            // to give the later ones a chance to land.
+            outcomeRule: input.outcomeRule,
+            outcomes
           }))
       } catch (error) {
         if (aborted && isCancellation(error)) return { _tag: "Aborted" }

@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Identifier, ThresholdBreach, Thresholds } from "@flux/domain"
+import { Identifier, OutcomeRule, ThresholdBreach, Thresholds } from "@flux/domain"
 
 /**
  * Schemas for the values that cross the Temporal wire into an activity.
@@ -29,7 +29,14 @@ export const MonitorStepParams = Schema.Struct({
   version: Identifier,
   windowMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
   pollIntervalMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
-  rules: Thresholds
+  rules: Thresholds,
+  outcomeRule: Schema.optional(OutcomeRule),
+  // Counts, so whole and non-negative. `failures <= total` is not stated here
+  // because the workflow is the only writer and increments them together.
+  outcomes: Schema.optional(Schema.Struct({
+    total: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+    failures: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
+  }))
 })
 
 export const NotifyParams = Schema.Struct({

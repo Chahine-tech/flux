@@ -85,3 +85,66 @@ describe("healthCheck", () => {
       expect(exit._tag).toBe("Failure")
     }).pipe(Effect.provide(healthBad)))
 })
+
+describe("monitorStep with verdicts pushed in", () => {
+  // No metrics are consulted at all here: the rule is judged on what was
+  // reported, so the port is present only because the use case requires it.
+  const noMetrics = Layer.succeed(MetricsPort, { query: () => Effect.succeed(0) })
+  const outcomeRule = { name: "taskFailureRate", max: 0.05 }
+
+  const judge = (outcomes: { total: number; failures: number } | undefined) =>
+    monitorStep({
+      service: "agent",
+      version: "v2",
+      window: Duration.millis(0),
+      pollInterval: Duration.millis(1),
+      rules: [],
+      outcomeRule,
+      outcomes
+    }).pipe(Effect.provide(noMetrics))
+
+  it.live("treats no verdicts as undecided, not as healthy", () =>
+    Effect.gen(function*() {
+      // The failing case a bare threshold gets wrong: zero out of zero is a 0%
+      // failure rate, and 0% is under any limit. Nothing observed is not the
+      // same as nothing wrong.
+      expect((yield* judge(undefined))._tag).toBe("Inconclusive")
+      expect((yield* judge({ total: 0, failures: 0 }))._tag).toBe("Inconclusive")
+    }))
+
+  it.live("is still undecided on a handful of verdicts", () =>
+    Effect.gen(function*() {
+      // 1 failure in 30 is 3.3% against a 5% limit. The bare rule promotes; the
+      // interval reaches 16.7%, so this says it does not know yet.
+      expect((yield* judge({ total: 30, failures: 1 }))._tag).toBe("Inconclusive")
+    }))
+
+  it.live("clears the rule once enough verdicts agree", () =>
+    Effect.gen(function*() {
+      expect((yield* judge({ total: 200, failures: 0 }))._tag).toBe("Within")
+    }))
+
+  it.live("breaches when the failures are real", () =>
+    Effect.gen(function*() {
+      const result = yield* judge({ total: 500, failures: 100 })
+      expect(result._tag).toBe("Breached")
+      if (result._tag === "Breached") {
+        expect(result.breaches[0].metric).toBe("taskFailureRate")
+        expect(result.breaches[0].observed).toBeCloseTo(0.2, 3)
+      }
+    }))
+
+  it.live("leaves the verdict rule out when none was configured", () =>
+    Effect.gen(function*() {
+      const result = yield* monitorStep({
+        service: "agent",
+        version: "v2",
+        window: Duration.millis(0),
+        pollInterval: Duration.millis(1),
+        rules: [],
+        outcomes: { total: 3, failures: 3 }
+      }).pipe(Effect.provide(noMetrics))
+      // Verdicts with no rule to judge them are not a silent breach.
+      expect(result._tag).toBe("Within")
+    }))
+})

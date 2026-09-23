@@ -43,6 +43,26 @@ export const MetricRule = Schema.Struct({
 })
 export type MetricRule = typeof MetricRule.Type
 
+/**
+ * A rule fed by verdicts pushed in from outside rather than by a query.
+ *
+ * Some things are only known later. Whether an agent's task succeeded is
+ * settled when the pull request merges, when the suite goes green, when a
+ * person accepts the work. There is no gauge to scrape at the moment of the
+ * decision, so the decision has to be able to wait for the answer to arrive.
+ *
+ * No `query`, because nothing is asked; no `sampleSize` either, because the
+ * count is exactly the number of verdicts received, which the workflow already
+ * knows. The limit is a failure rate, so the interval from `confidence.ts`
+ * applies and the same three answers follow: too few verdicts is undecided, not
+ * healthy.
+ */
+export const OutcomeRule = Schema.Struct({
+  name: NonEmptyString,
+  max: Schema.Finite
+})
+export type OutcomeRule = typeof OutcomeRule.Type
+
 /** The failure budget for a deployment: a non-empty list of metric rules. */
 export const Thresholds = Schema.NonEmptyArray(MetricRule)
 export type Thresholds = typeof Thresholds.Type

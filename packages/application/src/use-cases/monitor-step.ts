@@ -21,6 +21,10 @@ export const monitorStep = Effect.fn("flux.monitorStep")(function*(params: {
   readonly window: Duration.Duration
   readonly pollInterval: Duration.Duration
   readonly rules: ReadonlyArray<MetricRule>
+  /** Judged on `outcomes` rather than on a query. */
+  readonly outcomeRule?: { readonly name: string; readonly max: number } | undefined
+  /** Verdicts the workflow has received, as of the start of this window. */
+  readonly outcomes?: { readonly total: number; readonly failures: number } | undefined
 }) {
   yield* Effect.annotateCurrentSpan({ "flux.service": params.service, "flux.version": params.version })
   const metrics = yield* MetricsPort
@@ -44,7 +48,20 @@ export const monitorStep = Effect.fn("flux.monitorStep")(function*(params: {
         })),
       { concurrency: "unbounded" }
     )
-    return evaluateThresholds(readings as MetricReadings, params.rules)
+    // A pushed verdict is a reading like any other, which is the point: once it
+    // carries its own count it goes through the same interval as a scraped
+    // rate, and zero verdicts lands on `Inconclusive` rather than on a tidy
+    // 0% failure rate. Nothing observed is not the same as nothing wrong.
+    if (params.outcomeRule !== undefined) {
+      const tally = params.outcomes ?? { total: 0, failures: 0 }
+      readings[params.outcomeRule.name] = {
+        value: tally.total === 0 ? 0 : tally.failures / tally.total,
+        sampleSize: tally.total
+      }
+    }
+
+    const rules = params.outcomeRule === undefined ? params.rules : [...params.rules, params.outcomeRule]
+    return evaluateThresholds(readings as MetricReadings, rules)
   })
 
   const windowMs = Duration.toMillis(params.window)
