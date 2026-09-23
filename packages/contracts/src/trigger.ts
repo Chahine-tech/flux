@@ -74,6 +74,14 @@ export const TriggerDeploymentRequest = Schema.Struct({
    */
   outcomeRule: Schema.optionalKey(OutcomeRule),
   /**
+   * How long a pause may wait for a person, in milliseconds. Absent means it
+   * waits indefinitely, which is the point of a pause: the machine stopped
+   * because the call was not its to make, and timing out into a default would
+   * be making it anyway. Set it when an unanswered tradeoff should roll back
+   * rather than hold traffic at the current step forever.
+   */
+  pauseTimeoutMs: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
+  /**
    * Optional deploy window as a cron expression. The canary may only
    * start while `now` is inside it; absent means always allowed. Checked by the
    * control plane before admission — it never reaches the workflow.

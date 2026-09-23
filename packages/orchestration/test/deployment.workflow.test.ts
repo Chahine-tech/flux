@@ -148,7 +148,7 @@ describe("deploymentWorkflow", () => {
     let step = 0
     const result = await run({
       ...okActivities(),
-      monitorStep: async () => (++step >= 2 ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] } : { _tag: "Within" })
+      monitorStep: async () => (++step >= 2 ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }], action: "rollback" as const } : { _tag: "Within" })
     })
     expect(result.kind).toBe("RolledBack")
     if (result.kind === "RolledBack") {
@@ -168,7 +168,7 @@ describe("deploymentWorkflow", () => {
         ...okActivities(),
         monitorStep: async () =>
           (++step >= 2
-            ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] }
+            ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }], action: "rollback" as const }
             : { _tag: "Within" })
       }
     })
@@ -200,7 +200,7 @@ describe("deploymentWorkflow", () => {
       },
       monitorStep: async () =>
         (++step >= 2
-          ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] }
+          ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }], action: "rollback" as const }
           : { _tag: "Within" }),
       notify: async (n: { kind: string }) => {
         notifications.push(n.kind)
@@ -256,7 +256,7 @@ describe("deploymentWorkflow", () => {
       ...okActivities(),
       monitorStep: async () => ({
         _tag: "Breached",
-        breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }]
+        breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }], action: "rollback" as const
       })
     }, blueGreenInput)
     expect(result.kind).toBe("RolledBack")
@@ -434,7 +434,7 @@ describe("the state a finished deployment reports", () => {
       ...okActivities(),
       monitorStep: async () =>
         (++step >= 2
-          ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] }
+          ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }], action: "rollback" as const }
           : { _tag: "Within" })
     })
     expect(result.kind).toBe("RolledBack")
@@ -453,7 +453,7 @@ describe("the state a finished deployment reports", () => {
       ...okActivities(),
       monitorStep: async () =>
         (++step >= 2
-          ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] }
+          ? { _tag: "Breached", breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }], action: "rollback" as const }
           : { _tag: "Within" }),
       // `setTrafficWeight` serves both directions, so failing it outright would
       // break the first forward shift and the workflow would never reach a

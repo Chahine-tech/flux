@@ -18,6 +18,10 @@ export const DeploymentPhase = Schema.Literals([
   "shifting",
   "monitoring",
   "awaiting-approval",
+  // Stopped on a tradeoff rather than on a fault, traffic where it is, waiting
+  // for a person. Distinct from `awaiting-approval`, which is a gate the plan
+  // asked for in advance; this one the readings asked for.
+  "paused",
   "rolling-back",
   "done"
 ])

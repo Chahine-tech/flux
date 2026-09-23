@@ -122,6 +122,23 @@ Choices that go past plumbing:
   gathering, and it goes through the same interval as a scraped rate: zero
   verdicts is `Inconclusive`, not a tidy 0% failure rate.
 
+- Not every breach is a fault, so not every breach rolls back. A version that
+  is better on every technical measure and costs 38% more per unit of work has
+  not regressed, it has presented a bill, and no number in a config file is
+  entitled to decide whether that bill is worth paying. A rule marked
+  `onBreach: "pause"` stops the rollout where it is, leaves traffic untouched,
+  says what it found, and waits for `approve` or `abort`. A rollback rule
+  outranks a pause rule when both breach at once, because a genuine regression
+  is not up for discussion.
+
+  Cost is a mean, not a rate, so Wilson does not apply to it: a mean needs its
+  spread, since two runs averaging $0.10 over 40 tasks, one ranging $0.09 to
+  $0.11 and the other $0.01 to $0.50, say completely different things about the
+  next task. Give the rule `stdDev` alongside `sampleSize` and it is judged on a
+  Student interval instead. $0.138 per task against a $0.10 budget spans
+  $0.122 to $0.154 over 40 tasks, entirely above the limit, so the regression is
+  real; the same mean over 5 tasks spans $0.076 to $0.200 and decides nothing.
+
 - Admission control (one deployment per service, plus a global cap) is a single
   STM transaction: a `TxSemaphore` and a `TxHashMap` updated together, so two
   concurrent triggers can't over-admit.

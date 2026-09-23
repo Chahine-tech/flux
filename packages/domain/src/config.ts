@@ -39,7 +39,30 @@ export const MetricRule = Schema.Struct({
    * proportions, and a latency handed a sample size falls back to the plain
    * comparison rather than producing a confident wrong number.
    */
-  sampleSize: Schema.optional(NonEmptyString)
+  sampleSize: Schema.optional(NonEmptyString),
+  /**
+   * PromQL for the standard deviation, when the metric is an average rather
+   * than a rate. Supplying it (alongside `sampleSize`) switches the rule to a
+   * Student interval on the mean.
+   *
+   * A mean needs its spread and a rate does not: two runs averaging $0.10 over
+   * 40 tasks, one ranging $0.09 to $0.11 and the other $0.01 to $0.50, say
+   * completely different things about the next task.
+   */
+  stdDev: Schema.optional(NonEmptyString),
+  /**
+   * What a confirmed breach of this rule should do. Defaults to rolling back.
+   *
+   * `pause` stops the rollout where it is, traffic untouched, and waits for a
+   * person. It is for limits whose breach is a judgement call rather than a
+   * fault: a version that is better on every technical measure and costs 38%
+   * more per unit of work has not regressed, it has presented a tradeoff, and
+   * no threshold in a config file is entitled to settle that on its own.
+   *
+   * A rollback rule outranks a pause rule when both breach at once: a genuine
+   * technical regression is not up for discussion.
+   */
+  onBreach: Schema.optional(Schema.Literals(["rollback", "pause"]))
 })
 export type MetricRule = typeof MetricRule.Type
 
@@ -59,7 +82,9 @@ export type MetricRule = typeof MetricRule.Type
  */
 export const OutcomeRule = Schema.Struct({
   name: NonEmptyString,
-  max: Schema.Finite
+  max: Schema.Finite,
+  /** As on `MetricRule`: roll back on breach, or stop and ask. */
+  onBreach: Schema.optional(Schema.Literals(["rollback", "pause"]))
 })
 export type OutcomeRule = typeof OutcomeRule.Type
 

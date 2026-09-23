@@ -163,7 +163,7 @@ describe.skipIf(!shouldCapture)("history fixture capture", () => {
         ...okActivities(),
         monitorStep: async () =>
           ++step >= 2
-            ? { _tag: "Breached" as const, breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }] }
+            ? { _tag: "Breached" as const, breaches: [{ metric: "errorRate", observed: 0.05, limit: 0.01 }], action: "rollback" as const }
             : { _tag: "Within" as const }
       },
       dataConverter,

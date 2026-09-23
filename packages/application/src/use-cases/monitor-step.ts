@@ -22,7 +22,11 @@ export const monitorStep = Effect.fn("flux.monitorStep")(function*(params: {
   readonly pollInterval: Duration.Duration
   readonly rules: ReadonlyArray<MetricRule>
   /** Judged on `outcomes` rather than on a query. */
-  readonly outcomeRule?: { readonly name: string; readonly max: number } | undefined
+  readonly outcomeRule?: {
+    readonly name: string
+    readonly max: number
+    readonly onBreach?: "rollback" | "pause" | undefined
+  } | undefined
   /** Verdicts the workflow has received, as of the start of this window. */
   readonly outcomes?: { readonly total: number; readonly failures: number } | undefined
 }) {
@@ -37,14 +41,12 @@ export const monitorStep = Effect.fn("flux.monitorStep")(function*(params: {
     yield* Effect.forEach(
       params.rules,
       (rule) =>
-        Effect.zip(
+        Effect.all([
           metrics.query(rule.query),
-          rule.sampleSize === undefined
-            ? Effect.succeed(undefined)
-            : metrics.query(rule.sampleSize),
-          { concurrent: true }
-        ).pipe(Effect.map(([value, sampleSize]) => {
-          readings[rule.name] = { value, sampleSize }
+          rule.sampleSize === undefined ? Effect.succeed(undefined) : metrics.query(rule.sampleSize),
+          rule.stdDev === undefined ? Effect.succeed(undefined) : metrics.query(rule.stdDev)
+        ], { concurrency: "unbounded" }).pipe(Effect.map(([value, sampleSize, stdDev]) => {
+          readings[rule.name] = { value, sampleSize, stdDev }
         })),
       { concurrency: "unbounded" }
     )

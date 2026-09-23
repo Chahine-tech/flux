@@ -29,7 +29,11 @@ export interface DeploymentActivities {
     readonly pollIntervalMs: number
     readonly rules: ReadonlyArray<DeploymentRule>
     /** Judged on the tally below rather than on a query. */
-    readonly outcomeRule?: { readonly name: string; readonly max: number } | undefined
+    readonly outcomeRule?: {
+      readonly name: string
+      readonly max: number
+      readonly onBreach?: "rollback" | "pause" | undefined
+    } | undefined
     /** Verdicts counted by the workflow, as of the start of this window. */
     readonly outcomes?: { readonly total: number; readonly failures: number } | undefined
   }): Promise<ThresholdEvaluation>

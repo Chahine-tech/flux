@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest"
 import { expect } from "vitest"
-import { compareToLimit, wilsonInterval } from "../src/confidence.ts"
+import { compareMeanToLimit, compareToLimit, meanInterval, tCritical, wilsonInterval, Z_95 } from "../src/confidence.ts"
 import type { Thresholds } from "../src/config.ts"
 import { evaluateThresholds } from "../src/thresholds.ts"
 
@@ -112,5 +112,98 @@ describe("evaluateThresholds with sample sizes", () => {
       undecided: { value: 0, sampleSize: 10 }
     }, two)
     expect(result._tag).toBe("Breached")
+  })
+})
+
+describe("meanInterval", () => {
+  it("says nothing from a single measurement", () => {
+    // One observation has no spread to estimate, so it supports no statement
+    // about the next one. Unbounded is the honest answer.
+    const { lower, upper } = meanInterval(0.1, 0, 1)
+    expect(lower).toBe(Number.NEGATIVE_INFINITY)
+    expect(upper).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it("uses Student, so small samples get wider intervals than z would give", () => {
+    // With sigma estimated from the sample, `z` makes the interval too narrow
+    // and concludes too early, which is the failure this is here to prevent.
+    const small = meanInterval(0.1, 0.05, 5)
+    const zWidth = 2 * 1.96 * (0.05 / Math.sqrt(5))
+    expect(small.upper - small.lower).toBeGreaterThan(zWidth)
+  })
+
+  it("converges on z as the sample grows", () => {
+    expect(tCritical(5)).toBeCloseTo(2.571, 3)
+    expect(tCritical(60)).toBeCloseTo(2.0, 2)
+    expect(tCritical(100_000)).toBeCloseTo(Z_95, 3)
+  })
+})
+
+describe("compareMeanToLimit, the cost regression case", () => {
+  const limit = 0.10
+
+  it("calls a 38% cost increase what it is, given enough tasks", () => {
+    // $0.138 per task against a $0.10 budget, over 40 tasks: the whole interval
+    // sits above the limit, so the regression is real and not sampling noise.
+    expect(compareMeanToLimit(0.138, 0.05, 40, limit)).toBe("above")
+  })
+
+  it("will not call it on five tasks", () => {
+    // Same mean, same spread, eight times less evidence.
+    expect(compareMeanToLimit(0.138, 0.05, 5, limit)).toBe("unknown")
+  })
+
+  it("stays undecided on a small increase", () => {
+    // $0.104 is over budget on the nose and inside the noise.
+    expect(compareMeanToLimit(0.104, 0.05, 40, limit)).toBe("unknown")
+  })
+
+  it("clears a version that is genuinely cheaper", () => {
+    expect(compareMeanToLimit(0.06, 0.02, 40, limit)).toBe("below")
+  })
+})
+
+describe("what a breach calls for", () => {
+  const costRule: Thresholds = [
+    { name: "costPerTask", query: "q", max: 0.10, sampleSize: "n", stdDev: "s", onBreach: "pause" }
+  ]
+
+  it("asks to pause when only pause rules breached", () => {
+    const result = evaluateThresholds({ costPerTask: { value: 0.138, sampleSize: 40, stdDev: 0.05 } }, costRule)
+    expect(result._tag).toBe("Breached")
+    if (result._tag === "Breached") expect(result.action).toBe("pause")
+  })
+
+  it("rolls back when a fault breached alongside a tradeoff", () => {
+    // A genuine technical regression is not up for discussion, whatever the
+    // cost rule wanted.
+    const both: Thresholds = [
+      ...costRule,
+      { name: "errorRate", query: "q2", max: 0.05, sampleSize: "n2" }
+    ]
+    const result = evaluateThresholds({
+      costPerTask: { value: 0.138, sampleSize: 40, stdDev: 0.05 },
+      errorRate: { value: 0.4, sampleSize: 500 }
+    }, both)
+    expect(result._tag).toBe("Breached")
+    if (result._tag === "Breached") expect(result.action).toBe("rollback")
+  })
+
+  it("defaults to rolling back when the rule says nothing", () => {
+    const plain: Thresholds = [{ name: "errorRate", query: "q", max: 0.05 }]
+    const result = evaluateThresholds({ errorRate: { value: 0.4 } }, plain)
+    if (result._tag === "Breached") expect(result.action).toBe("rollback")
+  })
+
+  it("omits the bounds it cannot compute rather than serialising an infinity", () => {
+    // These cross Temporal as JSON, where Infinity becomes null and the field
+    // would come back wrong instead of missing.
+    const result = evaluateThresholds({ costPerTask: { value: 0.2, sampleSize: 1, stdDev: 0.05 } }, costRule)
+    expect(result._tag).toBe("Inconclusive")
+    if (result._tag === "Inconclusive") {
+      expect(result.pending[0].lower).toBeUndefined()
+      expect(result.pending[0].upper).toBeUndefined()
+      expect(JSON.parse(JSON.stringify(result)).pending[0]).not.toHaveProperty("lower")
+    }
   })
 })

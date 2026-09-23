@@ -136,15 +136,19 @@ const describeUndecided = (
     readonly observed: number
     readonly limit: number
     readonly sampleSize: number
-    readonly lower: number
-    readonly upper: number
+    readonly lower?: number | undefined
+    readonly upper?: number | undefined
   }>
 ): string =>
   pending
-    .map((p) =>
-      `${p.metric} ${p.observed.toFixed(3)} over ${p.sampleSize} samples spans ` +
-      `${p.lower.toFixed(3)}..${p.upper.toFixed(3)} around ${p.limit}`
-    )
+    .map((p) => {
+      // Absent bounds mean the interval was unbounded, which is a mean with
+      // fewer than two observations. Saying so beats printing a number.
+      const span = p.lower === undefined || p.upper === undefined
+        ? "spans everything"
+        : `spans ${p.lower.toFixed(3)}..${p.upper.toFixed(3)}`
+      return `${p.metric} ${p.observed.toFixed(3)} over ${p.sampleSize} samples ${span} around ${p.limit}`
+    })
     .join("; ")
 
 export async function deploymentWorkflow(input: DeploymentInput): Promise<DeploymentResult> {
@@ -239,7 +243,10 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
     approved = true
   }, {
     validator: () => {
-      if (state.phase !== "awaiting-approval") {
+      // A pause is an approval gate too, opened by the readings rather than by
+      // the plan. Rejecting `approve` while one is open would leave the only
+      // way out of a paused deployment being to abort it.
+      if (state.phase !== "awaiting-approval" && state.phase !== "paused") {
         throw new Error("no approval gate is currently open")
       }
     }
@@ -333,7 +340,15 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
         return { kind: "Aborted", service: input.service, atPercent: step.percent }
       }
       if (evaluation._tag === "Breached") {
-        return await handleBreach(step.percent, evaluation.breaches)
+        // Tested against `!== "pause"`, never `=== "rollback"`. A verdict
+        // replayed out of a history recorded before `action` existed has it
+        // undefined, and the absent value means the old behaviour. Asking the
+        // positive question sent those executions into the pause branch and
+        // issued a `notify` where their history holds a `setTrafficWeight`,
+        // which `replay.test.ts` rejected as the nondeterminism it is.
+        if (evaluation.action !== "pause") return await handleBreach(step.percent, evaluation.breaches)
+        const decision = await pauseForDecision(step.percent, evaluation.breaches)
+        if (decision !== "continue") return decision
       }
       // Undecided after the whole budget: no breach to point at, and no grounds
       // to promote either. Traffic goes back, because leaving a share of it on a
@@ -461,6 +476,53 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
     }
   }
 
+  /**
+   * Stop on a tradeoff and wait for a person, traffic left where it is.
+   *
+   * A rule marked `onBreach: "pause"` is one whose breach is a judgement rather
+   * than a fault. The motivating case is cost: a version better on every
+   * technical measure that costs 38% more per unit of work has not regressed,
+   * it has presented a bill, and no number in a config file is entitled to
+   * decide whether that bill is worth paying. Rolling back would throw away a
+   * better version; promoting would spend someone's money on a decision they
+   * never made.
+   *
+   * So it stops, says exactly what it found, and waits. `approve` resumes the
+   * rollout, `abort` unwinds it, and a `pauseTimeoutMs` that expires rolls back,
+   * because a tradeoff nobody accepted has not been accepted. With no timeout
+   * set it waits indefinitely, which is the honest default: timing out into an
+   * answer would be making the call this exists to avoid making.
+   */
+  async function pauseForDecision(
+    atPercent: number,
+    breaches: ReadonlyArray<{ readonly metric: string; readonly observed: number; readonly limit: number }>
+  ): Promise<"continue" | DeploymentResult> {
+    const summary = breaches.map((b) => `${b.metric} ${b.observed} over ${b.limit}`).join("; ")
+    log.warn("paused on a tradeoff, waiting for a decision", { atPercent, summary })
+    // Phase before notification, not after. The notification is what tells a
+    // person to act, and `approve` is rejected unless a gate is open, so
+    // announcing the pause while the state still says `monitoring` leaves a
+    // window where the fastest responder is the one who gets refused.
+    state = { ...state, phase: "paused" }
+    await acts.notify({
+      kind: "step-advanced",
+      service: input.service,
+      message: `paused at ${atPercent}% (${summary}), waiting for approve or abort`
+    })
+
+    await condition(() => approved || aborted, input.pauseTimeoutMs)
+
+    if (aborted) {
+      await compensate()
+      return { kind: "Aborted", service: input.service, atPercent }
+    }
+    if (!approved) return await handleBreach(atPercent, breaches, `no decision within the pause window`)
+
+    approved = false
+    log.info("tradeoff accepted, resuming", { atPercent })
+    return "continue"
+  }
+
   async function handleBreach(
     atPercent: number,
     breaches: ReadonlyArray<{ readonly metric: string; readonly observed: number; readonly limit: number }>,
@@ -579,7 +641,9 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       return { kind: "Aborted", service: input.service, atPercent: 100 }
     }
     if (evaluation._tag === "Breached") {
-      return await handleBreach(100, evaluation.breaches)
+      if (evaluation.action !== "pause") return await handleBreach(100, evaluation.breaches)
+      const decision = await pauseForDecision(100, evaluation.breaches)
+      if (decision !== "continue") return decision
     }
     if (evaluation._tag === "Inconclusive") {
       return await handleBreach(100, [], describeUndecided(evaluation.pending))

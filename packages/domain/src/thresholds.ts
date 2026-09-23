@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { compareToLimit, wilsonInterval } from "./confidence.ts"
+import { compareMeanToLimit, compareToLimit, meanInterval, wilsonInterval } from "./confidence.ts"
 import type { MetricRule } from "./config.ts"
 
 /** Which metric was breached, its observed value, and the limit it crossed. */
@@ -20,8 +20,15 @@ export const PendingReading = Schema.Struct({
   observed: Schema.Finite,
   limit: Schema.Finite,
   sampleSize: Schema.Finite,
-  lower: Schema.Finite,
-  upper: Schema.Finite
+  /**
+   * Both bounds are absent when the interval is unbounded, which is what a mean
+   * with fewer than two observations gives: one measurement has no spread to
+   * estimate from. They are omitted rather than set to an infinity because this
+   * crosses Temporal as JSON, where `Infinity` serialises to `null` and the
+   * field would come back wrong instead of missing.
+   */
+  lower: Schema.optional(Schema.Finite),
+  upper: Schema.optional(Schema.Finite)
 })
 export type PendingReading = typeof PendingReading.Type
 
@@ -37,7 +44,16 @@ export type PendingReading = typeof PendingReading.Type
  */
 export type ThresholdEvaluation =
   | { readonly _tag: "Within" }
-  | { readonly _tag: "Breached"; readonly breaches: readonly [ThresholdBreach, ...ThresholdBreach[]] }
+  | {
+    readonly _tag: "Breached"
+    readonly breaches: readonly [ThresholdBreach, ...ThresholdBreach[]]
+    /**
+     * What the breach calls for. `pause` only when *every* breached rule asked
+     * for it: one genuine regression among them and the answer is to roll back,
+     * whatever the others wanted.
+     */
+    readonly action: "rollback" | "pause"
+  }
   | { readonly _tag: "Inconclusive"; readonly pending: readonly [PendingReading, ...PendingReading[]] }
 
 /**
@@ -52,6 +68,8 @@ export type ThresholdEvaluation =
 export interface Reading {
   readonly value: number
   readonly sampleSize?: number | undefined
+  /** Present when the value is a mean: its spread, which a mean needs and a rate does not. */
+  readonly stdDev?: number | undefined
 }
 
 /** A metric reading keyed by rule name. */
@@ -82,38 +100,60 @@ export type MetricReadings = Readonly<Record<string, Reading>>
  */
 export const evaluateThresholds = (
   readings: MetricReadings,
-  // Only `name` and `max` are ever read: `query` and `sampleSize` say how to
-  // obtain a reading, which is finished business by the time one is being
-  // judged. Typing it this way lets a rule fed by pushed verdicts, which has no
-  // query at all, be judged by the same function rather than by a copy of it.
-  rules: ReadonlyArray<Pick<MetricRule, "name" | "max">>
+  // Only what a judgement needs: the name, the limit, and what a breach of it
+  // should do. `query`, `sampleSize` and `stdDev` say how to *obtain* a
+  // reading, which is finished business by the time one is being judged.
+  // Typing it this way lets a rule fed by pushed verdicts, which has no query
+  // at all, go through the same function rather than through a copy of it.
+  rules: ReadonlyArray<Pick<MetricRule, "name" | "max" | "onBreach">>
 ): ThresholdEvaluation => {
   const breaches: ThresholdBreach[] = []
   const pending: PendingReading[] = []
+
+  let pausesOnly = true
 
   for (const rule of rules) {
     const reading = readings[rule.name]
     if (reading === undefined) continue
     const observed = reading.value
     const n = reading.sampleSize
-    const isProportion = observed >= 0 && observed <= 1
+    const spread = reading.stdDev
 
-    if (n === undefined || !isProportion) {
-      if (observed > rule.max) breaches.push({ metric: rule.name, observed, limit: rule.max })
-      continue
-    }
+    // Which of the three regimes applies is decided by what the reading knows
+    // about itself, not by a label: a spread means a mean, a count alone means
+    // a proportion, and neither means there is nothing to infer from.
+    const interval = spread !== undefined && n !== undefined
+      ? { verdict: compareMeanToLimit(observed, spread, n, rule.max), bounds: meanInterval(observed, spread, n), n }
+      : n !== undefined && observed >= 0 && observed <= 1
+      ? { verdict: compareToLimit(observed, n, rule.max), bounds: wilsonInterval(observed * n, n), n }
+      : undefined
 
-    const verdict = compareToLimit(observed, n, rule.max)
+    const verdict = interval?.verdict ?? (observed > rule.max ? "above" : "below")
+
     if (verdict === "above") {
       breaches.push({ metric: rule.name, observed, limit: rule.max })
-    } else if (verdict === "unknown") {
-      const { lower, upper } = wilsonInterval(observed * n, n)
-      pending.push({ metric: rule.name, observed, limit: rule.max, sampleSize: n, lower, upper })
+      if ((rule.onBreach ?? "rollback") === "rollback") pausesOnly = false
+    } else if (verdict === "unknown" && interval !== undefined) {
+      const { lower, upper } = interval.bounds
+      pending.push({
+        metric: rule.name,
+        observed,
+        limit: rule.max,
+        sampleSize: interval.n,
+        ...(Number.isFinite(lower) ? { lower } : {}),
+        ...(Number.isFinite(upper) ? { upper } : {})
+      })
     }
   }
 
   const [firstBreach, ...restBreaches] = breaches
-  if (firstBreach !== undefined) return { _tag: "Breached", breaches: [firstBreach, ...restBreaches] }
+  if (firstBreach !== undefined) {
+    return {
+      _tag: "Breached",
+      breaches: [firstBreach, ...restBreaches],
+      action: pausesOnly ? "pause" : "rollback"
+    }
+  }
 
   const [firstPending, ...restPending] = pending
   return firstPending === undefined

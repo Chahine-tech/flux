@@ -133,7 +133,7 @@ describe("a window that cannot decide", () => {
   }, 60_000)
 
   it("still rolls back immediately on a real breach, budget or not", async () => {
-    const breach = { _tag: "Breached" as const, breaches: [{ metric: "taskFailureRate", observed: 0.4, limit: 0.05 }] }
+    const breach = { _tag: "Breached" as const, breaches: [{ metric: "taskFailureRate", observed: 0.4, limit: 0.05 }], action: "rollback" as const }
     const { activities, monitorCalls } = harness([breach])
     const result = await run(activities, input({ maxMonitorMs: 10_000 }))
 
@@ -243,4 +243,82 @@ describe("verdicts signalled into a running deployment", () => {
 
     expect(seen.every((tally) => tally?.total === 0)).toBe(true)
   }, 60_000)
+})
+
+describe("a breach that is a tradeoff rather than a fault", () => {
+  // The motivating case: a version better on every technical measure that costs
+  // 38% more per unit of work has not regressed, it has presented a bill.
+  const tradeoff = {
+    _tag: "Breached" as const,
+    breaches: [{ metric: "costPerTask", observed: 0.138, limit: 0.10 }],
+    action: "pause" as const
+  }
+
+  /** Drives one deployment, reacting once the workflow reports it is paused. */
+  const runPaused = async (
+    verdict: unknown,
+    react: ((handle: { signal: Function; query: Function }) => Promise<void>) | undefined,
+    over: Partial<DeploymentInput> = {}
+  ) => {
+    const phases: Array<string> = []
+    const activities: DeploymentActivities = {
+      healthCheck: async () => {},
+      setTrafficWeight: async () => {},
+      monitorStep: async () => verdict as Awaited<ReturnType<DeploymentActivities["monitorStep"]>>,
+      notify: async () => {},
+      readRouterState: async () => [],
+      recordOutcome: async () => {},
+      postmortem: async () => {}
+    }
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      namespace: env.namespace ?? "default",
+      taskQueue: TASK_QUEUE,
+      workflowBundle,
+      activities
+    })
+    const handle = await env.client.workflow.start("deploymentWorkflow", {
+      taskQueue: TASK_QUEUE,
+      workflowId: `pause-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      args: [input(over)]
+    })
+
+    const result = await worker.runUntil(async () => {
+      if (react !== undefined) {
+        // Wait for the gate to actually be open before acting on it.
+        for (let i = 0; i < 100; i++) {
+          const state = await handle.query("status") as { phase: string }
+          phases.push(state.phase)
+          if (state.phase === "paused") break
+          await new Promise((resolve) => setTimeout(resolve, 100))
+        }
+        await react(handle as never)
+      }
+      return handle.result()
+    }) as DeploymentResult
+
+    return { result, sawPaused: phases.includes("paused") }
+  }
+
+  it("stops, reports itself paused, and resumes when the tradeoff is accepted", async () => {
+    const { result, sawPaused } = await runPaused(tradeoff, async (handle) => {
+      await (handle as unknown as { executeUpdate: Function }).executeUpdate("approve")
+    })
+    expect(sawPaused).toBe(true)
+    // Traffic was never unwound: accepting the bill promotes the version.
+    expect(result.kind).toBe("Succeeded")
+  }, 90_000)
+
+  it("unwinds when the tradeoff is refused", async () => {
+    const { result } = await runPaused(tradeoff, async (handle) => {
+      await (handle as unknown as { executeUpdate: Function }).executeUpdate("abort")
+    })
+    expect(result.kind).toBe("Aborted")
+  }, 90_000)
+
+  it("rolls back when nobody answers within the pause window", async () => {
+    // A tradeoff nobody accepted has not been accepted.
+    const { result } = await runPaused(tradeoff, undefined, { pauseTimeoutMs: 2_000 })
+    expect(result.kind).toBe("RolledBack")
+  }, 90_000)
 })

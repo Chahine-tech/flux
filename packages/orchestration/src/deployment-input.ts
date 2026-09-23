@@ -23,6 +23,10 @@ export interface DeploymentRule {
   readonly max: number
   /** PromQL for the denominator, when the metric is a proportion. See `confidence.ts`. */
   readonly sampleSize?: string | undefined
+  /** PromQL for the spread, when the metric is a mean. */
+  readonly stdDev?: string | undefined
+  /** Roll back on breach (the default), or stop and ask. */
+  readonly onBreach?: "rollback" | "pause" | undefined
 }
 
 export interface DeploymentStepInput {
@@ -74,7 +78,13 @@ export interface DeploymentInput {
    * outcomes only known later. No query and no `sampleSize`: the count is the
    * number of verdicts received, which the workflow is the one holding.
    */
-  readonly outcomeRule?: { readonly name: string; readonly max: number } | undefined
+  readonly outcomeRule?: {
+    readonly name: string
+    readonly max: number
+    readonly onBreach?: "rollback" | "pause" | undefined
+  } | undefined
+  /** How long a pause waits for a person. Absent waits indefinitely, on purpose. */
+  readonly pauseTimeoutMs?: number | undefined
   /**
    * Bound a single workflow run to this many steps: after completing that many,
    * the workflow continues-as-new with the remaining steps to keep history
@@ -227,6 +237,9 @@ export interface DeploymentState {
     | "shifting"
     | "monitoring"
     | "awaiting-approval"
+    // Stopped on a tradeoff rather than a fault. Mirrors the contract's
+    // `DeploymentPhase`, restated here for the same reason `DeploymentRule` is.
+    | "paused"
     | "rolling-back"
     | "done"
   readonly service: string
