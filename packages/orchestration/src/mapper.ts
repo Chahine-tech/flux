@@ -51,7 +51,10 @@ export const configToInput = (config: DeploymentConfig): DeploymentInput => ({
   rules: config.thresholds.map((rule) => ({
     name: rule.name,
     query: rule.query,
-    max: rule.max
+    max: rule.max,
+    // Carried through, or the rule silently loses the thing that lets it say
+    // it does not know yet.
+    sampleSize: rule.sampleSize
   })),
   // Operational default; a per-deployment override can come from config later.
   pollIntervalMs: 5_000

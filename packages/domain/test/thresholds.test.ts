@@ -7,7 +7,10 @@ const rules: Thresholds = [
   { name: "errorRate", query: 'rate(http_errors[1m])', max: 0.01 },
   { name: "p99", query: "histogram_quantile(0.99, ...)", max: 500 }
 ]
-const readings = (errorRate: number, p99: number): MetricReadings => ({ errorRate, p99 })
+const readings = (errorRate: number, p99: number): MetricReadings => ({
+  errorRate: { value: errorRate },
+  p99: { value: p99 }
+})
 
 describe("evaluateThresholds", () => {
   it("is Within when every reading is at or below its rule's max", () => {
@@ -40,6 +43,6 @@ describe("evaluateThresholds", () => {
   })
 
   it("ignores rules with no reading", () => {
-    expect(evaluateThresholds({ errorRate: 0.005 }, rules)._tag).toBe("Within")
+    expect(evaluateThresholds({ errorRate: { value: 0.005 } }, rules)._tag).toBe("Within")
   })
 })

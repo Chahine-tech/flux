@@ -33,6 +33,16 @@ const ThresholdEvaluationSchema = Schema.Union([
       observed: Schema.Finite,
       limit: Schema.Finite
     }))
+  }),
+  Schema.TaggedStruct("Inconclusive", {
+    pending: Schema.NonEmptyArray(Schema.Struct({
+      metric: Schema.String,
+      observed: Schema.Finite,
+      limit: Schema.Finite,
+      sampleSize: Schema.Finite,
+      lower: Schema.Finite,
+      upper: Schema.Finite
+    }))
   })
 ])
 

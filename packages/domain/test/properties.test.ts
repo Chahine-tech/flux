@@ -26,7 +26,7 @@ describe("evaluateThresholds (property-based)", () => {
 
   it.prop("breaches exactly the rules whose reading exceeds max", [Pairs], ([samples]) => {
     const rules = samples.map((s, i) => ({ name: `m${i}`, query: `q${i}`, max: s.max }))
-    const readings: MetricReadings = Object.fromEntries(samples.map((s, i) => [`m${i}`, s.reading]))
+    const readings: MetricReadings = Object.fromEntries(samples.map((s, i) => [`m${i}`, { value: s.reading }]))
 
     const result = evaluateThresholds(readings, rules)
     const expected = samples.filter((s) => s.reading > s.max).length

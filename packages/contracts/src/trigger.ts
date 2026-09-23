@@ -51,6 +51,18 @@ export const TriggerDeploymentRequest = Schema.Struct({
   rules: Thresholds,
   pollIntervalMs: Schema.Finite.check(Schema.isGreaterThan(0)),
   /**
+   * How long a single observation window may be stretched when the readings
+   * cannot yet decide, in milliseconds. Only reachable by a rule carrying
+   * `sampleSize`, since nothing else produces an undecided verdict.
+   *
+   * A window that ends undecided has not seen enough to tell a healthy version
+   * from a failing one. Promoting on that is a coin flip and rolling back
+   * punishes a version that did nothing wrong, so the honest move is to keep
+   * watching. This bounds how long "keep watching" may run before the
+   * deployment gives up and rolls back.
+   */
+  maxMonitorMs: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
+  /**
    * Optional deploy window as a cron expression. The canary may only
    * start while `now` is inside it; absent means always allowed. Checked by the
    * control plane before admission — it never reaches the workflow.

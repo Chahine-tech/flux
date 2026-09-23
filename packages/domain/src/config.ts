@@ -28,8 +28,18 @@ export const MetricRule = Schema.Struct({
   name: NonEmptyString,
   /** The PromQL expression to evaluate. */
   query: NonEmptyString,
-  /** Upper bound — a breach is `observed > max`. */
-  max: Schema.Finite
+  /** Upper bound: a breach is `observed > max`. */
+  max: Schema.Finite,
+  /**
+   * PromQL returning how many observations produced `query`, when the metric is
+   * a proportion. Supplying it switches the rule from a bare comparison to one
+   * that can answer "not enough evidence yet" instead of promoting on noise.
+   *
+   * Only meaningful for a rate in `[0, 1]`: the interval behind this is for
+   * proportions, and a latency handed a sample size falls back to the plain
+   * comparison rather than producing a confident wrong number.
+   */
+  sampleSize: Schema.optional(NonEmptyString)
 })
 export type MetricRule = typeof MetricRule.Type
 

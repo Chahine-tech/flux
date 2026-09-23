@@ -1,5 +1,5 @@
 import { Duration, Effect, Option, Schedule, Stream } from "effect"
-import { evaluateThresholds, type MetricReadings, type MetricRule, type ThresholdEvaluation } from "@flux/domain"
+import { evaluateThresholds, type MetricReadings, type MetricRule, type Reading, type ThresholdEvaluation } from "@flux/domain"
 import { MetricsPort } from "../ports/metrics.ts"
 
 const isBreached = (evaluation: ThresholdEvaluation): boolean => evaluation._tag === "Breached"
@@ -25,13 +25,23 @@ export const monitorStep = Effect.fn("flux.monitorStep")(function*(params: {
   yield* Effect.annotateCurrentSpan({ "flux.service": params.service, "flux.version": params.version })
   const metrics = yield* MetricsPort
 
+  // A rule that declares `sampleSize` costs a second query, issued alongside
+  // the first: the two are independent, and the port's RequestResolver folds
+  // any PromQL shared across rules into one backend fetch either way.
   const pollAndEvaluate = Effect.gen(function*() {
-    const readings: Record<string, number> = {}
+    const readings: Record<string, Reading> = {}
     yield* Effect.forEach(
       params.rules,
-      (rule) => metrics.query(rule.query).pipe(Effect.map((value) => {
-        readings[rule.name] = value
-      })),
+      (rule) =>
+        Effect.zip(
+          metrics.query(rule.query),
+          rule.sampleSize === undefined
+            ? Effect.succeed(undefined)
+            : metrics.query(rule.sampleSize),
+          { concurrent: true }
+        ).pipe(Effect.map(([value, sampleSize]) => {
+          readings[rule.name] = { value, sampleSize }
+        })),
       { concurrency: "unbounded" }
     )
     return evaluateThresholds(readings as MetricReadings, params.rules)

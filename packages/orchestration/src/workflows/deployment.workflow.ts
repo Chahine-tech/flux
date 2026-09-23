@@ -103,6 +103,29 @@ const asApplicationFailure = (error: unknown): ApplicationFailure | undefined =>
   return undefined
 }
 
+/**
+ * A one-line account of what could not be settled. The interval is the part
+ * that matters: "0.033 over 30 samples spans 0.006..0.167 around 0.05" says why
+ * a reading under the limit still did not clear it, which the reading alone
+ * never could.
+ */
+const describeUndecided = (
+  pending: ReadonlyArray<{
+    readonly metric: string
+    readonly observed: number
+    readonly limit: number
+    readonly sampleSize: number
+    readonly lower: number
+    readonly upper: number
+  }>
+): string =>
+  pending
+    .map((p) =>
+      `${p.metric} ${p.observed.toFixed(3)} over ${p.sampleSize} samples spans ` +
+      `${p.lower.toFixed(3)}..${p.upper.toFixed(3)} around ${p.limit}`
+    )
+    .join("; ")
+
 export async function deploymentWorkflow(input: DeploymentInput): Promise<DeploymentResult> {
   // Normalize the strategy. Older histories carry a top-level
   // `steps` array and no `strategy`, so they fall back to `canary` with those
@@ -272,31 +295,21 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       }
 
       state = { ...state, phase: "monitoring" }
-      // Run the monitor in its own scope so an abort can cancel it mid-window.
-      const monitorScope = new CancellationScope()
-      cancelMonitor = () => monitorScope.cancel()
-      let evaluation: Awaited<ReturnType<DeploymentActivities["monitorStep"]>>
-      try {
-        evaluation = await monitorScope.run(() =>
-          monitorActs.monitorStep({
-            service: input.service,
-            version: input.version,
-            windowMs: step.monitorMs,
-            pollIntervalMs: input.pollIntervalMs,
-            rules: input.rules
-          }))
-      } catch (error) {
-        if (aborted && isCancellation(error)) {
-          await compensate()
-          return { kind: "Aborted", service: input.service, atPercent: step.percent }
-        }
-        throw error
-      } finally {
-        cancelMonitor = undefined
-      }
+      const evaluation = await observe(step.monitorMs)
 
+      if (evaluation._tag === "Aborted") {
+        await compensate()
+        return { kind: "Aborted", service: input.service, atPercent: step.percent }
+      }
       if (evaluation._tag === "Breached") {
         return await handleBreach(step.percent, evaluation.breaches)
+      }
+      // Undecided after the whole budget: no breach to point at, and no grounds
+      // to promote either. Traffic goes back, because leaving a share of it on a
+      // version nothing could vouch for is the one option that is not a
+      // decision.
+      if (evaluation._tag === "Inconclusive") {
+        return await handleBreach(step.percent, [], describeUndecided(evaluation.pending))
       }
 
       // 3. Optional manual-approval gate.
@@ -341,11 +354,87 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
   // `RolledBack` or the louder `RollbackFailed`. Extracting it keeps the two
   // strategies' breach handling identical — and the command sequence unchanged
   // for the committed canary histories.
+  /**
+   * Observe until the readings decide, or until the budget runs out.
+   *
+   * A window can now end without an answer. With few observations a rate that
+   * has not crossed its limit is not the same claim as a rate we are confident
+   * sits below it: 1 failure in 30 reads as 3.3% against a 5% limit, and the
+   * true rate consistent with that sample reaches 16.7%. Promoting on it is a
+   * coin flip with a number written on it. See `confidence.ts`.
+   *
+   * So an undecided window is extended rather than resolved by guesswork, up to
+   * `maxMonitorMs`. Without that budget this runs exactly one window and the
+   * behaviour is what it always was, which is also what happens to every
+   * deployment whose rules carry no `sampleSize`: nothing else can produce an
+   * undecided verdict.
+   *
+   * No `patched()` guards this, and the reason is worth writing down rather
+   * than trusting. The extra iterations are unreachable for any execution that
+   * started before this existed: an `Inconclusive` verdict requires a rule
+   * carrying `sampleSize`, a field those inputs do not have, and on replay the
+   * verdict comes from history, where only `Within` and `Breached` were ever
+   * recorded. The command sequence is therefore identical.
+   */
+  async function observe(
+    windowMs: number
+  ): Promise<Awaited<ReturnType<DeploymentActivities["monitorStep"]>> | { readonly _tag: "Aborted" }> {
+    // Two guards, both of which this loop needs to terminate at all, which in a
+    // durable workflow means a hang that survives restarts rather than a hung
+    // process someone kills.
+    //
+    //   - A window of zero cannot accumulate evidence, so it cannot be extended
+    //     either. Without this, `spentMs` never grows and the loop runs forever
+    //     on any undecided verdict.
+    //   - A budget below the window means no extension, never a window cut
+    //     short to fit the budget.
+    const budgetMs = windowMs > 0 ? Math.max(windowMs, input.maxMonitorMs ?? windowMs) : 0
+    let spentMs = 0
+
+    for (;;) {
+      const thisWindowMs = Math.min(windowMs, budgetMs - spentMs)
+      // Its own scope per window, so an abort still cancels mid-observation.
+      const monitorScope = new CancellationScope()
+      cancelMonitor = () => monitorScope.cancel()
+      let evaluation: Awaited<ReturnType<DeploymentActivities["monitorStep"]>>
+      try {
+        evaluation = await monitorScope.run(() =>
+          monitorActs.monitorStep({
+            service: input.service,
+            version: input.version,
+            windowMs: thisWindowMs,
+            pollIntervalMs: input.pollIntervalMs,
+            rules: input.rules
+          }))
+      } catch (error) {
+        if (aborted && isCancellation(error)) return { _tag: "Aborted" }
+        throw error
+      } finally {
+        cancelMonitor = undefined
+      }
+
+      spentMs += thisWindowMs
+      if (evaluation._tag !== "Inconclusive" || spentMs >= budgetMs) return evaluation
+
+      log.info("readings cannot decide yet, extending the window", {
+        spentMs,
+        budgetMs,
+        undecided: evaluation.pending.map((pending) => pending.metric).join(",")
+      })
+    }
+  }
+
   async function handleBreach(
     atPercent: number,
-    breaches: ReadonlyArray<{ readonly metric: string; readonly observed: number; readonly limit: number }>
+    breaches: ReadonlyArray<{ readonly metric: string; readonly observed: number; readonly limit: number }>,
+    // Set when the rollback is for want of evidence rather than for a breach.
+    // The outcome is the same (traffic goes back) and the reason is not, so the
+    // operator reading the notification should not have to guess which it was.
+    undecided?: string
   ): Promise<DeploymentResult> {
-    log.warn("threshold breached, rolling back", { atPercent })
+    log.warn(undecided === undefined ? "threshold breached, rolling back" : "evidence never arrived, rolling back", {
+      atPercent
+    })
     const restored = await compensate()
 
     let rollbackFailed = false
@@ -368,8 +457,10 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
       kind: rollbackFailed ? "rollback-failed" : "rolled-back",
       service: input.service,
       message: rollbackFailed
-        ? `rollback to ${input.previousVersion} did NOT restore health — needs attention`
-        : `regression at ${atPercent}% — rolled back to ${input.previousVersion}`
+        ? `rollback to ${input.previousVersion} did NOT restore health, needs attention`
+        : undecided === undefined
+        ? `regression at ${atPercent}%, rolled back to ${input.previousVersion}`
+        : `not enough evidence at ${atPercent}% (${undecided}), rolled back to ${input.previousVersion}`
     })
 
     if (patched("rollback-postmortem")) {
@@ -444,30 +535,17 @@ export async function deploymentWorkflow(input: DeploymentInput): Promise<Deploy
 
     // 4. Bake: one monitor over the bake window, cancellable by an abort.
     state = { ...state, phase: "monitoring" }
-    const monitorScope = new CancellationScope()
-    cancelMonitor = () => monitorScope.cancel()
-    let evaluation: Awaited<ReturnType<DeploymentActivities["monitorStep"]>>
-    try {
-      evaluation = await monitorScope.run(() =>
-        monitorActs.monitorStep({
-          service: input.service,
-          version: input.version,
-          windowMs: bg.bakeMs,
-          pollIntervalMs: input.pollIntervalMs,
-          rules: input.rules
-        }))
-    } catch (error) {
-      if (aborted && isCancellation(error)) {
-        await compensate()
-        return { kind: "Aborted", service: input.service, atPercent: 100 }
-      }
-      throw error
-    } finally {
-      cancelMonitor = undefined
-    }
+    const evaluation = await observe(bg.bakeMs)
 
+    if (evaluation._tag === "Aborted") {
+      await compensate()
+      return { kind: "Aborted", service: input.service, atPercent: 100 }
+    }
     if (evaluation._tag === "Breached") {
       return await handleBreach(100, evaluation.breaches)
+    }
+    if (evaluation._tag === "Inconclusive") {
+      return await handleBreach(100, [], describeUndecided(evaluation.pending))
     }
 
     // 5. Bake passed — commit.

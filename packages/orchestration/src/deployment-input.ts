@@ -55,6 +55,12 @@ export interface DeploymentInput {
   /** How often each step samples metrics while monitoring, in milliseconds. */
   readonly pollIntervalMs: number
   /**
+   * Ceiling on a single observation window when the readings cannot decide.
+   * Absent means one window and no extension, which is every deployment whose
+   * rules carry no `sampleSize`, since nothing else produces that verdict.
+   */
+  readonly maxMonitorMs?: number | undefined
+  /**
    * Bound a single workflow run to this many steps: after completing that many,
    * the workflow continues-as-new with the remaining steps to keep history
    * small. Temporal's own `continueAsNewSuggested` triggers the same
